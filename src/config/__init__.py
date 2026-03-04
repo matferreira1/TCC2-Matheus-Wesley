@@ -1,0 +1,1 @@
+"""Pacote de configuração global."""

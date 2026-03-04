@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────
+# IAJuris — requirements.txt
+# Python 3.10+  |  Ambiente totalmente local
+# ─────────────────────────────────────────────
+
+# API Framework
+fastapi==0.111.0
+uvicorn[standard]==0.41.0
+
+# Validação de dados / Settings
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# HTTP assíncrono (cliente Ollama)
+httpx==0.27.0
+
+# Groq SDK (API externa — provedor LLM alternativo ao Ollama)
+groq>=0.11.0
+
+# Banco de dados assíncrono (SQLite + FTS5)
+aiosqlite==0.20.0
+
+# Utilitários
+python-multipart==0.0.9   # form-data no FastAPI
+python-dotenv==1.0.1      # leitura do .env
+
+# ETL / processamento de CSV
+pandas==2.2.2
+
+# Testes
+pytest==8.2.0
+pytest-asyncio==0.23.6
+httpx==0.27.0             # TestClient assíncrono (já listado acima)

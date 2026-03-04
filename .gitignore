@@ -1,0 +1,44 @@
+# ─── Python ───────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# ─── Ambientes virtuais ────────────────────────
+.venv/
+venv/
+env/
+.env
+
+# ─── Banco de dados local ──────────────────────
+data/db/*.db
+data/db/*.sqlite
+data/db/*.sqlite3
+
+# ─── Dados brutos (podem ser grandes) ─────────
+data/raw/*.csv
+data/raw/*.zip
+data/raw/*.json
+
+# ─── IDEs / Editores ───────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Logs e temporários ────────────────────────
+*.log
+*.tmp
+*.bak
+.DS_Store
+
+# ─── Pytest ───────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
