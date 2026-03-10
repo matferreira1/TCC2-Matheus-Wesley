@@ -61,7 +61,64 @@ CREATE VIRTUAL TABLE IF NOT EXISTS {settings.db_table_fts} USING fts5(
 );
 """
 
-# Triggers para manter o índice FTS5 sincronizado com a tabela principal.
+# ---------------------------------------------------------------------------
+# DDL — tabela teses_stj (Jurisprudência em Teses do STJ)
+# ---------------------------------------------------------------------------
+
+_DDL_TESES_STJ = """
+CREATE TABLE IF NOT EXISTS teses_stj (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    area           TEXT,
+    edicao_num     INTEGER,
+    edicao_titulo  TEXT,
+    tese_num       INTEGER,
+    tese_texto     TEXT,
+    julgados       TEXT,
+    created_at     TEXT DEFAULT (datetime('now'))
+);
+"""
+
+_DDL_TESES_STJ_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS teses_stj_fts USING fts5(
+    tese_texto,
+    area,
+    edicao_titulo,
+    content='teses_stj',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 1'
+);
+"""
+
+_DDL_TESES_TRIGGER_INSERT = """
+CREATE TRIGGER IF NOT EXISTS teses_stj_ai
+    AFTER INSERT ON teses_stj BEGIN
+        INSERT INTO teses_stj_fts(rowid, tese_texto, area, edicao_titulo)
+        VALUES (new.id, new.tese_texto, new.area, new.edicao_titulo);
+    END
+"""
+
+_DDL_TESES_TRIGGER_DELETE = """
+CREATE TRIGGER IF NOT EXISTS teses_stj_ad
+    AFTER DELETE ON teses_stj BEGIN
+        INSERT INTO teses_stj_fts(teses_stj_fts, rowid, tese_texto, area, edicao_titulo)
+        VALUES ('delete', old.id, old.tese_texto, old.area, old.edicao_titulo);
+    END
+"""
+
+_DDL_TESES_TRIGGER_UPDATE = """
+CREATE TRIGGER IF NOT EXISTS teses_stj_au
+    AFTER UPDATE ON teses_stj BEGIN
+        INSERT INTO teses_stj_fts(teses_stj_fts, rowid, tese_texto, area, edicao_titulo)
+        VALUES ('delete', old.id, old.tese_texto, old.area, old.edicao_titulo);
+        INSERT INTO teses_stj_fts(rowid, tese_texto, area, edicao_titulo)
+        VALUES (new.id, new.tese_texto, new.area, new.edicao_titulo);
+    END
+"""
+
+# ---------------------------------------------------------------------------
+# Triggers jurisprudencia FTS5
+# ---------------------------------------------------------------------------
+
 _DDL_TRIGGER_INSERT = f"""
 CREATE TRIGGER IF NOT EXISTS jurisprudencia_ai
     AFTER INSERT ON {settings.db_table_meta} BEGIN
@@ -158,7 +215,7 @@ async def init_db() -> None:
         )
 
     # Executa cada bloco DDL separadamente
-    for ddl_block in (_DDL_JURISPRUDENCIA, _DDL_FTS):
+    for ddl_block in (_DDL_JURISPRUDENCIA, _DDL_FTS, _DDL_TESES_STJ, _DDL_TESES_STJ_FTS):
         await _db.execute(ddl_block)
 
     # Triggers são criados individualmente para evitar problemas de parsing
@@ -167,6 +224,9 @@ async def init_db() -> None:
         _DDL_TRIGGER_INSERT,
         _DDL_TRIGGER_DELETE,
         _DDL_TRIGGER_UPDATE,
+        _DDL_TESES_TRIGGER_INSERT,
+        _DDL_TESES_TRIGGER_DELETE,
+        _DDL_TESES_TRIGGER_UPDATE,
     ):
         await _db.execute(trigger_ddl)
 

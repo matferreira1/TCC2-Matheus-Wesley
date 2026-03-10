@@ -49,14 +49,25 @@ async def handle_query(
             detail="Erro interno ao processar a consulta.",
         )
 
+    sources_acordaos = [
+        SourceDocument(
+            tribunal=s.tribunal,
+            numero_processo=s.numero_processo,
+            ementa=s.ementa,
+            tipo="acordao",
+        )
+        for s in resp.sources
+    ]
+    sources_teses = [
+        SourceDocument(
+            tribunal="STJ",
+            numero_processo=f"Ed. {t.edicao_num} — Tese {t.tese_num}",
+            ementa=t.tese_texto,
+            tipo="tese_stj",
+        )
+        for t in resp.sources_teses
+    ]
     return QueryResponse(
         answer=resp.answer,
-        sources=[
-            SourceDocument(
-                tribunal=s.tribunal,
-                numero_processo=s.numero_processo,
-                ementa=s.ementa,
-            )
-            for s in resp.sources
-        ],
+        sources=sources_acordaos + sources_teses,
     )

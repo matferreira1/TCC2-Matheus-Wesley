@@ -35,6 +35,7 @@ class SourceDocument(BaseModel):
     tribunal: str
     numero_processo: str
     ementa: str
+    tipo: str = Field(default="acordao", description="'acordao' (STF) ou 'tese_stj' (STJ Em Teses)")
 
 
 class QueryResponse(BaseModel):
