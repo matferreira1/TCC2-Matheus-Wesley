@@ -3,7 +3,24 @@
 from __future__ import annotations
 
 import logging
+import re
 import sys
+
+# Padrões de dados sensíveis que nunca devem aparecer nos logs
+_REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r'gsk_[A-Za-z0-9]{20,}'), '[GROQ_KEY_REDACTED]'),
+]
+
+
+class _SecretFilter(logging.Filter):
+    """Remove segredos conhecidos das mensagens de log antes de emiti-las."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = str(record.msg)
+        for pattern, replacement in _REDACT_PATTERNS:
+            msg = pattern.sub(replacement, msg)
+        record.msg = msg
+        return True
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -17,6 +34,7 @@ def setup_logging(debug: bool = False) -> None:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
+    handler.addFilter(_SecretFilter())
 
     root = logging.getLogger()
     root.setLevel(level)

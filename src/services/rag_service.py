@@ -12,9 +12,18 @@ from dataclasses import dataclass, field
 import aiosqlite
 
 from src.config.settings import settings
-from src.services import ollama_service, groq_service, search_service
+from src.services import ollama_service, groq_service, search_service, semantic_service
 
 logger = logging.getLogger(__name__)
+
+_VALID_LLM_PROVIDERS = frozenset({"groq", "ollama"})
+_MAX_PROMPT_CHARS = 32_000  # aviso se prompt superar este limite
+
+# Padrões de prompt injection em conteúdo do banco ou na pergunta do usuário
+_INJECTION_RE = re.compile(
+    r'(?i)(ignore|disregard|forget|bypass)\s.{0,40}(instruction|prompt|rule|directive)'
+    r'|(system|admin)\s*(prompt|command|mode)',
+)
 
 
 @dataclass
@@ -27,19 +36,50 @@ class RagResponse:
 
 
 async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
-    """Executa o pipeline RAG: busca FTS5 (acórdãos + teses) → prompt → LLM."""
+    """Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM."""
     logger.info("━━━━ Nova consulta RAG ━━━━")
     logger.info("Pergunta: %s", question)
     inicio = time.perf_counter()
 
-    # Busca paralela nos dois índices FTS5
-    sources, sources_teses = await asyncio.gather(
-        search_service.search(conn, question, top_k=settings.rag_top_k),
-        search_service.search_teses(conn, question, top_k=settings.rag_top_k_teses),
+    # Busca paralela: FTS5 (lexical) + semântica em acórdãos e teses
+    _FETCH = 15  # candidatos de cada fonte antes do RRF
+    (
+        fts5_acordaos,
+        fts5_teses,
+        sem_acordaos,
+        sem_teses,
+    ) = await asyncio.gather(
+        search_service.search(conn, question, top_k=_FETCH),
+        search_service.search_teses(conn, question, top_k=_FETCH),
+        semantic_service.search_semantic(conn, question, top_k=_FETCH),
+        semantic_service.search_teses_semantic(conn, question, top_k=_FETCH),
     )
 
+    # RRF: funde lexical + semântico e seleciona os melhores para o prompt
+    sources = semantic_service.rrf_acordaos(fts5_acordaos, sem_acordaos, top_n=settings.rag_top_k)
+    sources_teses = semantic_service.rrf_teses(fts5_teses, sem_teses, top_n=settings.rag_top_k_teses)
+
+    logger.info(
+        "Retrieval híbrido: %d acórdãos + %d teses (FTS5) | %d + %d (semântico) → RRF → %d + %d",
+        len(fts5_acordaos), len(fts5_teses),
+        len(sem_acordaos), len(sem_teses),
+        len(sources), len(sources_teses),
+    )
+
+    if settings.llm_provider not in _VALID_LLM_PROVIDERS:
+        raise ValueError(
+            f"LLM_PROVIDER inválido: {settings.llm_provider!r}. "
+            f"Valores aceitos: {', '.join(sorted(_VALID_LLM_PROVIDERS))}"
+        )
+
     prompt = _build_prompt(question, sources, sources_teses)
-    logger.info("Prompt enviado à LLM:\n%s\n%s\n%s", "─" * 60, prompt, "─" * 60)
+    logger.debug("Prompt enviado à LLM:\n%s\n%s\n%s", "─" * 60, prompt, "─" * 60)
+
+    if len(prompt) > _MAX_PROMPT_CHARS:
+        logger.warning(
+            "Prompt muito longo: %d chars (limite recomendado: %d).",
+            len(prompt), _MAX_PROMPT_CHARS,
+        )
 
     if settings.llm_provider == "groq":
         logger.info("Provedor LLM: Groq (%s)", settings.groq_model)
@@ -119,6 +159,11 @@ def _extract_ementa_payload(ementa: str, max_chars: int = 1500) -> str:
     return extracted
 
 
+def _sanitize_doc_text(text: str) -> str:
+    """Remove padrões de prompt injection de textos vindos do banco."""
+    return _INJECTION_RE.sub('[CONTEÚDO REMOVIDO]', text)
+
+
 def _build_prompt(
     question: str,
     sources: list[search_service.SearchResult],
@@ -128,16 +173,24 @@ def _build_prompt(
     context_parts: list[str] = []
 
     for i, s in enumerate(sources):
-        payload = _extract_ementa_payload(s.ementa, max_chars=settings.rag_max_ementa_chars)
+        payload = _sanitize_doc_text(
+            _extract_ementa_payload(s.ementa, max_chars=settings.rag_max_ementa_chars)
+        )
         context_parts.append(
             f"[Acórdão STF {i + 1}] {s.numero_processo}\n{payload}"
         )
 
     for i, t in enumerate(sources_teses):
-        context_parts.append(
-            f"[Tese STJ {i + 1}] {t.area} — Ed. {t.edicao_num}: {t.edicao_titulo} (Tese {t.tese_num})\n"
-            f"{t.tese_texto}"
-        )
+        tese_texto = _sanitize_doc_text(t.tese_texto)
+        if t.area == "SÚMULAS STJ":
+            context_parts.append(
+                f"[Súmula STJ {t.edicao_num}]\n{tese_texto}"
+            )
+        else:
+            context_parts.append(
+                f"[Tese STJ {i + 1}] {t.area} — Ed. {t.edicao_num}: {t.edicao_titulo} (Tese {t.tese_num})\n"
+                f"{tese_texto}"
+            )
 
     if context_parts:
         context = "\n\n".join(context_parts)
@@ -160,9 +213,14 @@ def _build_prompt(
         "2. Identifique os temas comuns e SINTETIZE-os em poucos pontos claros.\n"
         "   Não liste cada documento separadamente — agrupe os que tratam do mesmo tema.\n"
         "3. Após cada ponto, cite TODOS os documentos que o sustentam entre parênteses, separados por ponto e vírgula.\n"
-        "   Exemplo com acórdão: '(HC 263552 AgR; HC 264610 AgR)'\n"
-        "   Exemplo com tese STJ: '(STJ Ed. 39 T3; STJ Ed. 42 T1)'\n"
-        "   Exemplo misto: '(HC 263552 AgR; STJ Ed. 39 T3)'\n"
+        "   - Acórdão STF: cite SOMENTE o número do processo (ex: HC 263552 AgR), que está na linha\n"
+        "     imediatamente após o rótulo [Acórdão STF N]. NUNCA use o rótulo [Acórdão STF N] como citação.\n"
+        "     Exemplo: '(HC 263552 AgR; HC 264610 AgR)'\n"
+        "   - Tese STJ: copie o identificador COMPLETO que aparece após o rótulo [Tese STJ N],\n"
+        "     incluindo área, edição e número da tese. NUNCA use formas abreviadas.\n"
+        "     Exemplo: '(DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3))'\n"
+        "   - Súmula STJ: cite como 'Súmula NNN/STJ', usando o número que aparece no rótulo [Súmula STJ NNN].\n"
+        "     Exemplo: '(Súmula 528/STJ; Súmula 302/STJ)'\n"
         "4. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "
         "como resposta única e completa, quando absolutamente nenhum documento contém informação relevante. "
         "NUNCA insira essa frase dentro de uma lista numerada.\n"

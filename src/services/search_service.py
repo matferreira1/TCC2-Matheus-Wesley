@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
 import aiosqlite
+
+_DB_QUERY_TIMEOUT = 5.0  # segundos
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +70,22 @@ async def search(
     safe_query = " OR ".join(tokens)  # OR para maximizar recall em buscas por linguagem natural
     logger.info("FTS5 query: '%s' | top_k=%d", safe_query, top_k)
 
-    sql = f"""
-        SELECT j.id, j.tribunal, j.numero_processo, j.ementa, f.rank
-        FROM jurisprudencia_fts('{safe_query}') AS f
-        JOIN jurisprudencia j ON j.id = f.rowid
-        ORDER BY f.rank
+    sql = """
+        SELECT j.id, j.tribunal, j.numero_processo, j.ementa, jurisprudencia_fts.rank
+        FROM jurisprudencia_fts
+        JOIN jurisprudencia j ON j.id = jurisprudencia_fts.rowid
+        WHERE jurisprudencia_fts MATCH ?
+        ORDER BY jurisprudencia_fts.rank
         LIMIT ?
     """
-    cursor = await conn.execute(sql, (top_k,))
-    rows = await cursor.fetchall()
+    try:
+        cursor = await asyncio.wait_for(
+            conn.execute(sql, (safe_query, top_k)), timeout=_DB_QUERY_TIMEOUT
+        )
+        rows = await asyncio.wait_for(cursor.fetchall(), timeout=_DB_QUERY_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error("FTS5 acórdãos: timeout após %.1fs.", _DB_QUERY_TIMEOUT)
+        return []
     logger.info("FTS5 retornou %d resultado(s).", len(rows))
     return [
         SearchResult(
@@ -132,16 +142,23 @@ async def search_teses(
     safe_query = " OR ".join(tokens)
     logger.info("FTS5 teses query: '%s' | top_k=%d", safe_query, top_k)
 
-    sql = f"""
+    sql = """
         SELECT t.id, t.area, t.edicao_num, t.edicao_titulo,
-               t.tese_num, t.tese_texto, t.julgados, f.rank
-        FROM teses_stj_fts('{safe_query}') AS f
-        JOIN teses_stj t ON t.id = f.rowid
-        ORDER BY f.rank
+               t.tese_num, t.tese_texto, t.julgados, teses_stj_fts.rank
+        FROM teses_stj_fts
+        JOIN teses_stj t ON t.id = teses_stj_fts.rowid
+        WHERE teses_stj_fts MATCH ?
+        ORDER BY teses_stj_fts.rank
         LIMIT ?
     """
-    cursor = await conn.execute(sql, (top_k,))
-    rows = await cursor.fetchall()
+    try:
+        cursor = await asyncio.wait_for(
+            conn.execute(sql, (safe_query, top_k)), timeout=_DB_QUERY_TIMEOUT
+        )
+        rows = await asyncio.wait_for(cursor.fetchall(), timeout=_DB_QUERY_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error("FTS5 teses: timeout após %.1fs.", _DB_QUERY_TIMEOUT)
+        return []
     logger.info("FTS5 teses retornou %d resultado(s).", len(rows))
     return [
         TesesResult(

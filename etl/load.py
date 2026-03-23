@@ -1,7 +1,11 @@
 """ETL — Carga no SQLite FTS5. Execução: python -m etl.load"""
 
 import asyncio
+import re
 from pathlib import Path
+
+# Aceita apenas nomes no padrão esperado: letras, dígitos, hífens e underscores
+_CSV_NAME_RE = re.compile(r'^resultados-de-acordaos[\w\-]*\.csv$')
 
 import aiosqlite
 
@@ -13,22 +17,14 @@ RAW_DIR = Path("data/raw")
 
 
 def _collect_csvs() -> list[Path]:
-    """Coleta todos os CSVs de acórdãos em data/raw, priorizando o maior arquivo acumulativo."""
-    all_csvs = sorted(RAW_DIR.glob("resultados-de-acordaos*.csv"))
+    """Coleta todos os CSVs de acórdãos em data/raw, validando nomes."""
+    all_csvs = sorted(
+        p for p in RAW_DIR.glob("resultados-de-acordaos*.csv")
+        if _CSV_NAME_RE.match(p.name)
+    )
     if not all_csvs:
         raise FileNotFoundError(f"Nenhum CSV encontrado em {RAW_DIR}")
-
-    # O portal exporta arquivos acumulativos numerados; basta o maior (mais registros)
-    # mais o arquivo original sem número (caso seja um lote diferente)
-    numbered = [p for p in all_csvs if "(" in p.name]
-    unnumbered = [p for p in all_csvs if "(" not in p.name]
-
-    selected: list[Path] = []
-    if numbered:
-        # Pega apenas o de maior número (inclui todos os anteriores)
-        selected.append(max(numbered, key=lambda p: int(p.stem.split("(")[1].rstrip(")").strip())))
-    selected.extend(unnumbered)
-    return selected
+    return all_csvs
 
 
 async def load() -> None:

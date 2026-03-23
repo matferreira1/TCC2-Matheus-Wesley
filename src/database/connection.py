@@ -24,6 +24,9 @@ from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_META_TABLES = frozenset({"jurisprudencia"})
+_ALLOWED_FTS_TABLES = frozenset({"jurisprudencia_fts"})
+
 # ---------------------------------------------------------------------------
 # Conexão global (inicializada no startup do FastAPI)
 # ---------------------------------------------------------------------------
@@ -42,6 +45,7 @@ CREATE TABLE IF NOT EXISTS {settings.db_table_meta} (
     ementa           TEXT,
     decisao          TEXT,
     data_julgamento  TEXT,
+    embedding        BLOB,
     created_at       TEXT    DEFAULT (datetime('now'))
 );
 """
@@ -74,6 +78,7 @@ CREATE TABLE IF NOT EXISTS teses_stj (
     tese_num       INTEGER,
     tese_texto     TEXT,
     julgados       TEXT,
+    embedding      BLOB,
     created_at     TEXT DEFAULT (datetime('now'))
 );
 """
@@ -212,6 +217,17 @@ async def init_db() -> None:
     if _db is None:
         raise RuntimeError(
             "Banco de dados não foi aberto. Chame open_db() antes de init_db()."
+        )
+
+    if settings.db_table_meta not in _ALLOWED_META_TABLES:
+        raise ValueError(
+            f"db_table_meta inválido: {settings.db_table_meta!r}. "
+            f"Permitidos: {_ALLOWED_META_TABLES}"
+        )
+    if settings.db_table_fts not in _ALLOWED_FTS_TABLES:
+        raise ValueError(
+            f"db_table_fts inválido: {settings.db_table_fts!r}. "
+            f"Permitidos: {_ALLOWED_FTS_TABLES}"
         )
 
     # Executa cada bloco DDL separadamente

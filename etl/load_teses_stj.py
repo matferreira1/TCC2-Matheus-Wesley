@@ -27,20 +27,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Cabeçalho de página com área e edição (após \x0c)
+# Limites explícitos nos grupos capturam evitam ReDoS por backtracking catastrófico
 _RX_HEADER = re.compile(
-    r'^\s*((?:DIREITO|ORIENTAÇÕES|Direito)[^\n]+?)\s{3,}'
-    r'EDIÇÃO N\.\s*(\d+):\s*([^\n]+)',
+    r'^\s*((?:DIREITO|ORIENTAÇÕES|Direito)[^\n]{1,200}?)\s{3,}'
+    r'EDIÇÃO N\.\s*(\d+):\s*([^\n]{1,200})',
 )
 # Edição sem área (primeira ocorrência no bloco do sumário/conteúdo)
-_RX_EDICAO = re.compile(r'^\s*EDIÇÃO N\.\s*(\d+):\s*([^\n]+)')
+_RX_EDICAO = re.compile(r'^\s*EDIÇÃO N\.\s*(\d+):\s*([^\n]{1,200})')
 # Início de tese: 4 espaços + número + ponto
-_RX_TESE = re.compile(r'^    (\d+)\.\s+(.+)')
+_RX_TESE = re.compile(r'^    (\d+)\.\s+(.{1,1000})')
 # Continuação de tese (4 espaços, não começa com dígito+ponto)
-_RX_TESE_CONT = re.compile(r'^    (?!\d+\.)(.+)')
+_RX_TESE_CONT = re.compile(r'^    (?!\d+\.)(.{1,1000})')
 # Julgados: 10 espaços + "Julgados:"
-_RX_JULGADOS = re.compile(r'^ {8,}Julgados?:\s*(.+)', re.IGNORECASE)
+_RX_JULGADOS = re.compile(r'^ {8,}Julgados?:\s*(.{1,500})', re.IGNORECASE)
 # Continuação dos julgados
-_RX_JULGADOS_CONT = re.compile(r'^ {8,}(.+)')
+_RX_JULGADOS_CONT = re.compile(r'^ {8,}(.{1,500})')
 # Rodapé de página
 _RX_FOOTER = re.compile(r'scon\.stj\.jus\.br')
 
@@ -230,6 +231,7 @@ def load(txt_path: str, db_path: str) -> int:
         return 0
 
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys=ON;")
     try:
         _ensure_schema(conn)
         cur = conn.cursor()
@@ -261,9 +263,48 @@ def load(txt_path: str, db_path: str) -> int:
         conn.close()
 
 
+def load_area(txt_path: str, db_path: str, area: str) -> int:
+    """
+    Parseia o TXT, remove registros existentes da área informada e reinsere.
+
+    Útil para carregar arquivos temáticos (ex: jurispruConsumidor.txt)
+    sem apagar dados de outras áreas.
+    Retorna o nº de registros inseridos.
+    """
+    records = _parse(txt_path)
+    if not records:
+        logger.warning("Nenhuma tese encontrada em %s.", txt_path)
+        return 0
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys=ON;")
+    try:
+        _ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM teses_stj WHERE area = ?", (area,))
+        cur.execute("INSERT INTO teses_stj_fts(teses_stj_fts) VALUES('rebuild')")
+        deleted = cur.rowcount
+        logger.info("Removidos %d registros existentes da área '%s'.", deleted, area)
+        cur.executemany(
+            """
+            INSERT INTO teses_stj
+                (area, edicao_num, edicao_titulo, tese_num, tese_texto, julgados)
+            VALUES
+                (:area, :edicao_num, :edicao_titulo, :tese_num, :tese_texto, :julgados)
+            """,
+            records,
+        )
+        conn.commit()
+        logger.info("✓ %d teses inseridas para área '%s'.", len(records), area)
+        return len(records)
+    finally:
+        conn.close()
+
+
 def force_reload(txt_path: str, db_path: str) -> int:
     """Apaga dados existentes e recarrega do TXT."""
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys=ON;")
     try:
         _ensure_schema(conn)
         cur = conn.cursor()
@@ -287,9 +328,10 @@ if __name__ == "__main__":
     )
 
     force = "--force" in sys.argv
+    area_flag = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--area=")), None)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
 
-    txt = args[0] if len(args) > 0 else "JTSelecao.txt"
+    txt = args[0] if len(args) > 0 else "data/stj/JTSelecao.txt"
     db = args[1] if len(args) > 1 else "data/db/iajuris.db"
 
     if not Path(txt).exists():
@@ -301,5 +343,10 @@ if __name__ == "__main__":
         )
         sys.exit(1)
 
-    n = force_reload(txt, db) if force else load(txt, db)
+    if area_flag:
+        n = load_area(txt, db, area_flag)
+    elif force:
+        n = force_reload(txt, db)
+    else:
+        n = load(txt, db)
     logger.info("Concluído. Registros inseridos: %d", n)

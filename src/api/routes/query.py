@@ -6,17 +6,34 @@ Rotas:
 """
 
 import logging
+import re
+import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 import aiosqlite
 from src.api.schemas.query_schema import QueryRequest, QueryResponse, SourceDocument
 from src.database.connection import get_db
 from src.services import rag_service
+from src.api.limiter import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Padrões que indicam tentativa de prompt injection na pergunta
+_INJECTION_RE = re.compile(
+    r'(?i)(ignore|disregard|forget|bypass)\s.{0,40}(instruction|prompt|rule|directive)'
+    r'|(system|admin)\s*(prompt|command|mode)',
+)
+
+
+def _check_injection(question: str) -> None:
+    if _INJECTION_RE.search(question):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pergunta contém padrões não permitidos.",
+        )
 
 
 @router.post(
@@ -29,12 +46,16 @@ router = APIRouter()
         "fundamentada com o LLM local."
     ),
 )
+@limiter.limit("10/minute")
 async def handle_query(
+    request: Request,
     payload: QueryRequest,
     conn: aiosqlite.Connection = Depends(get_db),
 ) -> QueryResponse:
     """Handler principal do endpoint de consulta RAG."""
-    logger.info("POST /query | pergunta='%s'", payload.question)
+    request_id = str(uuid.uuid4())[:8]
+    _check_injection(payload.question)
+    logger.info("POST /query | id=%s | pergunta='%s'", request_id, payload.question)
     try:
         resp = await rag_service.answer(conn, payload.question)
     except httpx.TimeoutException:

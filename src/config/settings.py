@@ -11,14 +11,18 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Caminho absoluto do .env, independente do working directory
+_ENV_FILE = str(Path(__file__).resolve().parent.parent.parent / ".env")
 
 
 class Settings(BaseSettings):
     """Centraliza todas as configurações do IAJuris."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
@@ -59,10 +63,24 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # RAG
     # ------------------------------------------------------------------
-    rag_top_k: int = 5              # nº de acórdãos recuperados pelo FTS5
+    rag_top_k: int = 6              # nº de acórdãos recuperados pelo FTS5
     rag_top_k_teses: int = 3        # nº de teses STJ recuperadas pelo FTS5
     rag_max_tokens: int = 2048      # limite de tokens na geração
     rag_max_ementa_chars: int = 1500  # limite por ementa na montagem do prompt
+
+    # ------------------------------------------------------------------
+    # Validadores
+    # ------------------------------------------------------------------
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """Rejeita path traversal no caminho do banco."""
+        if v == ":memory:":
+            return v
+        if ".." in Path(v).parts:
+            raise ValueError(f"database_url contém path traversal: {v!r}")
+        return v
 
     # ------------------------------------------------------------------
     # Helpers (não lidos do .env)

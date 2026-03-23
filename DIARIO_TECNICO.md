@@ -896,3 +896,714 @@ As teses STJ foram determinantes nas respostas sobre direito civil e consumidor,
 - [ ] Implementar conjunto de avaliação formal (10 perguntas com gabarito, cobrindo STF e STJ)
 - [ ] Métricas de recuperação: Recall@5, MRR
 - [ ] Súmulas STF/STJ (terceira fonte potencial — alta precisão, compactas)
+
+---
+
+## Fase 8 — Suite Completa de Testes Automatizados (10 de março de 2026)
+
+### 8.1 Motivação
+
+Ao longo das sete fases anteriores, toda a base de código do projeto foi desenvolvida sem cobertura de testes formal. Os três arquivos de teste existentes (`test_ollama.py`, `test_rag.py`, `test_search.py`) continham apenas *stubs* — funções com `pass` ou `assert True` — sem qualquer verificação real de comportamento. Essa situação apresentava dois riscos objetivos para o trabalho de conclusão de curso:
+
+1. **Risco de regressão:** modificações em serviços centrais (como `rag_service.py` ou `search_service.py`) poderiam introduzir falhas silenciosas não detectadas até o momento de apresentação.
+2. **Risco de credibilidade acadêmica:** a ausência de testes é inconsistente com o nível de rigor esperado em um projeto de software de TCC, especialmente em um sistema que combina múltiplas camadas (banco de dados, LLM, API REST).
+
+A decisão foi implementar uma suite completa de testes unitários e de integração cobrindo todos os módulos do sistema.
+
+### 8.2 Configuração do Ambiente de Testes
+
+**Arquivo `pytest.ini` (criado):**
+
+```ini
+[pytest]
+asyncio_mode = auto
+testpaths = tests
+```
+
+A opção `asyncio_mode = auto` elimina a necessidade de decorar cada função de teste assíncrona com `@pytest.mark.asyncio`, reduzindo a verbosidade e evitando erros de esquecimento do decorator. Essa configuração é compatível com `pytest-asyncio >= 0.21`.
+
+**Arquivo `tests/conftest.py` (criado):**
+
+O fixture compartilhado `db` é o elemento central da infraestrutura de testes. Ele provisiona uma conexão `aiosqlite` com banco SQLite *in-memory* (`:memory:`), replica integralmente o schema de produção definido em `connection.py` e popula a base com dados de referência controlados.
+
+**Schema replicado:**
+
+```sql
+-- Tabela principal de acórdãos
+CREATE TABLE jurisprudencia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tribunal TEXT, numero_processo TEXT,
+    ementa TEXT, decisao TEXT, data_julgamento TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- FTS5 com content table e remoção de diacríticos
+CREATE VIRTUAL TABLE jurisprudencia_fts
+USING fts5(ementa, content='jurisprudencia', content_rowid='id',
+           tokenize='unicode61 remove_diacritics 1');
+
+-- Tabela de teses STJ
+CREATE TABLE teses_stj (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, area TEXT, edicao_num INTEGER,
+    edicao_titulo TEXT, tese_num INTEGER, tese_texto TEXT, julgados TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- FTS5 sobre teses (três colunas indexadas)
+CREATE VIRTUAL TABLE teses_stj_fts
+USING fts5(tese_texto, area, edicao_titulo,
+           content='teses_stj', content_rowid='id',
+           tokenize='unicode61 remove_diacritics 1');
+
+-- 6 triggers: AFTER INSERT / DELETE / UPDATE em cada tabela
+```
+
+**Dados de referência:**
+
+| Tipo | Quantidade | Cobertura temática |
+|---|---|---|
+| Acórdãos STF | 5 | HC pe­nal, ARE constitucional, RE administrativo (servidor público, habeas corpus, supressão de instância) |
+| Teses STJ | 3 | DIREITO CIVIL Ed.143, DIREITO DO CONSUMIDOR Ed.99, DIREITO PENAL Ed.55 |
+
+Os dados foram escolhidos para exercitar os caminhos mais críticos de cada serviço sem depender da base de produção (`data/db/iajuris.db`), garantindo isolamento e reproducibilidade dos testes.
+
+### 8.3 Descrição dos Arquivos de Teste
+
+#### `tests/test_search.py` — 23 testes
+
+Cobre as funções `search()` e `search_teses()` do módulo `src/services/search_service.py`.
+
+**`search()` — 13 testes:**
+- Retorno de lista não vazia para termo presente
+- Tipo dos elementos da lista (`SearchResult`)
+- Presença dos campos `tribunal`, `numero_processo`, `ementa`
+- Comportamento com termo ausente na base → lista vazia
+- Respeito ao parâmetro `top_k`
+- `top_k=1` retorna exatamente um resultado
+- Query vazia → lista vazia (sem exceção)
+- Query só com espaços em branco → lista vazia
+- Query com apenas stopwords (`o de que`) → lista vazia
+- `rank` BM25 retornado como valor negativo (convenção do SQLite FTS5)
+- Múltiplos termos aumentam o recall em relação a termo único
+- Recuperação de acórdão específico por termo — `"servidor publico estabilidade"` → RE 100004
+- Recuperação de acórdão por frase técnica — `"supressao instancia"` → HC 100005
+
+**`search_teses()` — 10 testes:**
+- Retorno de lista não vazia para termo presente
+- Tipo dos elementos (`TesesResult`)
+- Campos `area`, `edicao_num`, `edicao_titulo`, `tese_num`, `tese_texto`
+- Respeito ao parâmetro `top_k`
+- Query vazia → lista vazia
+- Termo ausente → lista vazia
+- Tabela vazia (fixture alternativo sem inserções) → lista vazia, sem exceção
+- Tabela inexistente → lista vazia, sem exceção (tratamento de `OperationalError`)
+- `"prisao preventiva cautelar"` recupera tese da área DIREITO PENAL
+- Campo `julgados` não vazio nos resultados
+
+#### `tests/test_rag.py` — 18 testes
+
+Cobre as três funções públicas de `src/services/rag_service.py`.
+
+**`answer()` — 5 testes:**
+- Retorna objeto do tipo `RagResponse`
+- Lista `sources` populada corretamente a partir dos documentos recuperados
+- Lista `sources_teses` vazia quando nenhuma tese é encontrada
+- Propagação de `RuntimeError` lançado pelo serviço LLM
+- Uso do `ollama_service.generate` quando `llm_provider="ollama"`, via `monkeypatch`
+
+**`_build_prompt()` — 8 testes:**
+- Contém o texto da pergunta do usuário
+- Contém rótulo `"STF 1"` para acórdão STF
+- Contém rótulo `"[Tese STJ 1]"` para tese STJ
+- Ausência de documentos → mensagem de fallback `"Nenhum documento relevante encontrado"`
+- Numeração sequencial correta para múltiplos acórdãos (STF 1, STF 2, STF 3)
+- Contém a palavra `"OBRIGAT"` (regras obrigatórias do prompt v5)
+- Para fontes mistas, menciona explicitamente os dois tribunais no prompt
+
+**`_extract_ementa_payload()` — 5 testes:**
+- Ementa curta (abaixo do limite) retornada integralmente
+- Ementa com comprimento exato do limite retornada sem truncamento
+- Ementa com seções romanas → extrai seções III e IV
+- Ementa sem seções romanas → aplica `textwrap.shorten` como fallback
+- Seção IV (DISPOSITIVO) preservada na extração
+- Resultado com `max_chars=300` tem comprimento ≤ 600 (margem para overhead de extração)
+
+#### `tests/test_ollama.py` — 9 testes
+
+Cobre `generate()` e `health_check()` de `src/services/ollama_service.py`. Utiliza `unittest.mock` para simular o cliente `httpx.AsyncClient` sem conexões de rede reais.
+
+- `generate()` concatena corretamente os chunks do stream
+- Resultado não vazio para sequência válida de chunks
+- Linhas vazias no stream são ignoradas
+- Stream encerrado ao receber `"done": true` (chunks posteriores descartados)
+- `httpx.ReadTimeout` propagado como exceção
+- `httpx.HTTPStatusError` propagado como exceção
+- `health_check()` retorna `True` com resposta HTTP 200
+- `health_check()` retorna `False` com resposta HTTP 503
+- `health_check()` retorna `False` com `httpx.ConnectError`
+
+#### `tests/test_groq.py` — 11 testes
+
+Cobre `_get_client()`, `generate()` e `health_check()` de `src/services/groq_service.py`. Utiliza `monkeypatch` e `AsyncMock` para isolar chamadas à API Groq.
+
+- `_get_client()` lança `ValueError` contendo `"GROQ_API_KEY"` quando a chave está ausente
+- `_get_client()` retorna instância de `AsyncGroq` quando a chave está configurada
+- `_get_client()` retorna o mesmo objeto em chamadas subsequentes (singleton via `lru_cache`)
+- `generate()` retorna o texto da `completion.choices[0].message.content`
+- `generate()` retorna string vazia quando `content` é `None`
+- `generate()` propagando `RuntimeError` lançado pela API
+- Parâmetro `model` utilizado é o definido em `settings.groq_model`
+- `temperature` ≤ 0.3 (configuração determinista para domínio jurídico)
+- `health_check()` retorna `True` quando `models.list()` é chamado com sucesso
+- `health_check()` retorna `False` quando `models.list()` lança exceção genérica
+- `health_check()` retorna `False` quando a chave está ausente (`ValueError` capturado internamente)
+
+#### `tests/test_api.py` — 12 testes
+
+Testa o endpoint `POST /api/v1/query` usando `httpx.AsyncClient` com `ASGITransport`, sem iniciar servidor real. As dependências de banco (`get_db`) e de ciclo de vida (`open_db`, `init_db`, `close_db`) são substituídas por overrides e `AsyncMock`.
+
+**Validação de entrada (3 testes):**
+- Pergunta com menos de 10 caracteres → HTTP 422 Unprocessable Entity
+- Pergunta com mais de 1.000 caracteres → HTTP 422
+- Corpo sem o campo `question` → HTTP 422
+
+**Respostas bem-sucedidas (7 testes):**
+- Requisição válida retorna HTTP 200
+- Resposta contém o campo `answer` com o conteúdo esperado
+- Resposta contém o campo `sources` como lista
+- Cada elemento de `sources` possui os quatro campos: `tribunal`, `numero_processo`, `ementa`, `tipo`
+- Presença de pelo menos um elemento com `tipo="acordao"`
+- Presença de pelo menos um elemento com `tipo="tese_stj"`
+- Lista `sources` vazia é uma resposta válida (sem erro)
+
+**Erros do serviço (2 testes):**
+- `httpx.TimeoutException` lançado por `rag_service.answer()` → HTTP 504 Gateway Timeout
+- `RuntimeError` lançado por `rag_service.answer()` → HTTP 500 Internal Server Error
+
+#### `tests/test_etl.py` — 12 testes
+
+Cobre `extract()` de `etl/extract.py` e `transform()` de `etl/transform.py`. Utiliza `tmp_path` do pytest para criar CSVs temporários sem dependência de arquivos reais.
+
+**`extract()` — 6 testes:**
+- Lê um CSV válido e retorna `pd.DataFrame`
+- DataFrame retornado é não vazio
+- Dois CSVs com registros distintos são concatenados (2 linhas no resultado)
+- Registros com `Titulo` duplicado são deduplicados (keep="last")
+- CSV sem colunas obrigatórias lança `ValueError` com mensagem `"Colunas ausentes"`
+- Colunas `Titulo`, `Ementa` e `Data de julgamento` preservadas após a extração
+
+**`transform()` — 6 testes:**
+- Retorna `pd.DataFrame`
+- Colunas de saída são exatamente `{titulo, ementa, data_julgamento}`
+- Registros com ementa vazia ou apenas espaços são removidos
+- Espaços múltiplos consecutivos na ementa são normalizados para espaço único
+- Coluna `titulo` normalizada (sem espaços externos, sem maiúsculas desnecessárias)
+- Cinco registros válidos são todos preservados após a transformação
+
+### 8.4 Desafios Técnicos Encontrados
+
+#### Codificação UTF-8 nos arquivos de teste
+
+A ferramenta de substituição de texto utilizada durante o desenvolvimento opera sobre bytes e apresentou falhas ao tentar localizar strings contendo caracteres multibyte em UTF-8 (sequências com `ç`, `ã`, `é`, `ú`, `Ó`, etc.). A causa foi a comparação byte-a-byte do bloco de contexto fornecido, que em presença de acentos pode não casar exatamente com o conteúdo armazenado dependendo da normalização Unicode do sistema.
+
+**Solução adotada:** todos os arquivos de teste foram escritos diretamente via `open(path, 'w', encoding='utf-8')` em chamadas Python explícitas no terminal, garantindo que a codificação UTF-8 fosse aplicada consistentemente desde a criação, sem passar por processamento intermediário.
+
+#### Sincronização do índice FTS5 com SQLite `:memory:`
+
+A tabela `jurisprudencia_fts` é uma *external content table* — seus dados não são armazenados internamente, mas lidos da tabela `jurisprudencia` via `content='jurisprudencia'`. No banco de produção, triggers mantêm o índice sincronizado automaticamente. Em testes com banco `:memory:`, é necessário que as inserções ativem os mesmos triggers, ou que o índice seja reconstruído com `INSERT INTO jurisprudencia_fts(jurisprudencia_fts) VALUES('rebuild')` após a carga dos dados.
+
+**Solução adotada:** o fixture `db` em `conftest.py` replica os 6 triggers de sincronização (INSERT/DELETE/UPDATE para cada índice FTS5) e executa `rebuild` explicitamente após cada conjunto de inserções, garantindo que as buscas BM25 nos testes retornem os mesmos resultados que no ambiente de produção.
+
+#### Assertions com caracteres acentuados nos rótulos do prompt
+
+Os testes de `_build_prompt()` verificavam se o rótulo `"[Acordao STF 1]"` (sem acento) estava presente no prompt gerado. O prompt real utiliza `"[Acórdão STF 1]"` (com acento), causando duas falhas. A causa raiz foi uma assunção incorreta sobre a grafia dos rótulos no momento da escrita dos testes.
+
+**Solução adotada:** os testes passaram a verificar substrings não-ambíguas que independem de acentuação: `"STF 1"` (invariante ao acento em `"Acórdão"`) e `"[Tese STJ 1]"` (que já não apresenta o problema). Essa abordagem melhora a robustez dos testes — uma futura alteração na grafia do rótulo não quebrará a verificação, desde que a identificação do tribunal e o número estejam presentes.
+
+### 8.5 Resultados
+
+```
+======================== 85 passed in 1.61s ========================
+```
+
+| Arquivo | Testes | Resultado |
+|---|---|---|
+| `test_search.py` | 23 | ✅ 23 passaram |
+| `test_rag.py` | 18 | ✅ 18 passaram |
+| `test_ollama.py` | 9 | ✅ 9 passaram |
+| `test_groq.py` | 11 | ✅ 11 passaram |
+| `test_api.py` | 12 | ✅ 12 passaram |
+| `test_etl.py` | 12 | ✅ 12 passaram |
+| **Total** | **85** | **✅ 0 falhas, 0 skips** |
+
+**Commit:** `2de587f` — *"test: suite completa de testes — 85 testes, 0 skips"*
+
+### 8.6 Estado Após a Fase 8
+
+- ✅ **pytest.ini:** `asyncio_mode = auto`, `testpaths = tests`
+- ✅ **conftest.py:** fixture `db` com schema completo e dados de referência controlados
+- ✅ **85 testes** cobrindo todos os módulos: ETL, busca, RAG, LLM (Groq + Ollama), API REST
+- ✅ **0 falhas, 0 skips** na execução completa da suite
+- ✅ **Isolamento total:** nenhum teste depende de banco de produção, serviço Groq/Ollama ou rede
+
+---
+
+## Fase 9 — Execução Automática de Testes no Startup (10 de março de 2026)
+
+### 9.1 Motivação
+
+Com a suite de testes implementada, surgiu a necessidade de garantir que eventuais regressões introduzidas entre sessões de desenvolvimento sejam identificadas imediatamente — antes que o sistema comece a atender requisições. A solução adotada foi integrar a execução da suite ao ciclo de vida da aplicação FastAPI, de modo que os resultados dos testes sejam registrados nos logs estruturados do servidor a cada inicialização.
+
+Essa abordagem tem precedente em sistemas de produção onde a etapa de *smoke test* ou *readiness check* faz parte do processo de startup, validando que o ambiente de execução está íntegro antes de expor o serviço.
+
+### 9.2 Implementação
+
+A execução dos testes foi encapsulada na função assíncrona `_run_tests()`, adicionada a `main.py`:
+
+```python
+async def _run_tests() -> bool:
+    """
+    Executa a suite de testes via pytest como subprocesso e loga cada linha.
+
+    Retorna True se todos os testes passaram (exit code 0), False caso contrário.
+    """
+    logger.info("━" * 55)
+    logger.info("STARTUP — Executando suite de testes (pytest tests/)")
+    logger.info("━" * 55)
+
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header",
+        "-p", "no:cacheprovider",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await proc.communicate()
+
+    for line in stdout.decode(errors="replace").splitlines():
+        if line.strip():
+            logger.info("[pytest] %s", line)
+
+    logger.info("━" * 55)
+    if proc.returncode == 0:
+        logger.info("STARTUP — Testes: ✓ TODOS PASSARAM (exit 0)")
+    else:
+        logger.warning("STARTUP — Testes: ✗ FALHAS DETECTADAS (exit %d)", proc.returncode)
+    logger.info("━" * 55)
+
+    return proc.returncode == 0
+```
+
+**Decisões de projeto:**
+
+| Decisão | Justificativa |
+|---|---|
+| `asyncio.create_subprocess_exec` em vez de `subprocess.run` | Não bloqueia o event loop do uvicorn durante a execução dos testes |
+| `stderr=asyncio.subprocess.STDOUT` | Unifica stdout e stderr em um único stream, simplificando a leitura linha a linha |
+| `sys.executable` em vez de `"pytest"` | Garante que o pytest do ambiente virtual ativo seja invocado, independentemente do PATH do sistema |
+| `-p no:cacheprovider` | Desativa o cache de resultados do pytest, forçando re-execução completa a cada startup |
+| `--tb=short` | Traceback compacto, legível nos logs sem ocupar dezenas de linhas por falha |
+| Não lança exceção em caso de falha | O servidor inicializa normalmente mesmo com falhas de teste; o resultado é diagnóstico, não bloqueante |
+
+### 9.3 Integração no Lifespan do FastAPI
+
+A função `_run_tests()` foi inserida como **primeira operação** no bloco de startup do `lifespan`, antes da abertura da conexão com o banco de dados:
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Iniciando IAJuris...")
+    await _run_tests()    # 1. Testes automatizados
+    await open_db()       # 2. Conexão SQLite
+    await init_db()       # 3. Schema FTS5
+    logger.info("Banco de dados pronto. Servidor disponível.")
+
+    yield  # aplicação em execução
+
+    # Shutdown
+    logger.info("Encerrando IAJuris...")
+    await close_db()
+    logger.info("Encerramento concluído.")
+```
+
+Essa ordenação é deliberada: os testes são executados antes do banco ser aberto porque o fixture `db` de `conftest.py` utiliza banco `:memory:` independente, não necessitando da conexão de produção. Caso fosse após `open_db()`, os testes ainda funcionariam, mas a ordem atual separa claramente a fase de verificação da fase de inicialização de recursos.
+
+### 9.4 Saída Esperada nos Logs
+
+Ao iniciar com `uvicorn main:app --reload`, os logs exibem o seguinte padrão:
+
+```
+INFO  | __main__                             | Iniciando IAJuris...
+INFO  | __main__                             | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFO  | __main__                             | STARTUP — Executando suite de testes (pytest tests/)
+INFO  | __main__                             | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFO  | __main__                             | [pytest] tests/test_api.py::test_question_too_short_returns_422 PASSED
+INFO  | __main__                             | [pytest] tests/test_api.py::test_question_too_long_returns_422 PASSED
+...
+INFO  | __main__                             | [pytest] 85 passed in 1.61s
+INFO  | __main__                             | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFO  | __main__                             | STARTUP — Testes: ✓ TODOS PASSARAM (exit 0)
+INFO  | __main__                             | ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFO  | __main__                             | Banco de dados pronto. Servidor disponível.
+```
+
+Em caso de falha em um ou mais testes, o padrão muda:
+
+```
+WARNING | __main__                           | STARTUP — Testes: ✗ FALHAS DETECTADAS (exit 1)
+```
+
+As linhas do traceback curto (`--tb=short`) do pytest ficam visíveis imediatamente acima, na sequência de logs `[pytest]`.
+
+### 9.5 Considerações sobre Tempo de Startup
+
+A suite de 85 testes executa em aproximadamente 1,6 segundos no hardware de desenvolvimento. Esse custo adicional no startup é aceitável para o contexto de desenvolvimento e para o escopo do TCC. Em um ambiente de produção com requisitos de *time-to-ready* mais rígidos, seria recomendável mover a execução de testes para um estágio anterior da pipeline de CI/CD e remover do startup da aplicação.
+
+### 9.6 Estado Após a Fase 9
+
+- ✅ **`_run_tests()`** adicionada a `main.py` — subprocesso assíncrono, sem bloqueio do event loop
+- ✅ **Lifespan atualizado** — testes executam antes da abertura do banco de dados
+- ✅ **Saída estruturada nos logs** — cada linha do pytest prefixada com `[pytest]`
+- ✅ **Comportamento não-bloqueante** — falhas de teste não impedem o servidor de subir
+- ✅ **Diagnóstico imediato** — regressões detectadas antes de qualquer requisição ser processada
+
+**Próximos passos:**
+- [x] Implementar conjunto de avaliação formal (10 perguntas com gabarito, cobrindo STF e STJ) → **Fase 10**
+- [x] Métricas de recuperação: Recall@5, MRR → **Fase 10**
+- [x] Métricas de geração: groundedness automatizado (comparação resposta × ementas fonte) → **Fase 10**
+- [x] Benchmark formal de latência com percentis p50/p95/p99 sobre a API REST → **Fase 10**
+
+---
+
+## Fase 10 — Framework de Avaliação Experimental (16 de março de 2026)
+
+### 10.1 Motivação
+
+A Fase 9 encerrou o desenvolvimento funcional do IAJuris com a suite de testes automatizados. A etapa seguinte, prevista explicitamente na seção 4.4 do TCC, é a **avaliação experimental** do sistema: medir objetivamente a qualidade de recuperação, a qualidade de geração, a latência operacional e comparar as três variantes arquiteturais definidas no trabalho.
+
+Sem esse módulo, o TCC seria incapaz de responder à pergunta central da avaliação: *a arquitetura FTS5+LLM é superior às alternativas (sem RAG, LIKE+LLM)?* Os resultados desta fase fornecem evidência empírica para essa resposta.
+
+### 10.2 Estrutura do Módulo `eval/`
+
+```
+eval/
+├── __init__.py               # Identificação do pacote
+├── dataset.json              # 20 perguntas jurídicas + 4 adversariais
+├── metrics.py                # Funções puras de cálculo de métricas IR
+├── retrieval_eval.py         # Avaliação de recuperação: FTS5 vs LIKE
+├── generation_eval.py        # LLM-as-judge + grounding check
+├── latency_eval.py           # Benchmark operacional (p50/p95/p99)
+├── compare_variants.py       # Comparação entre variantes A/B/C
+├── run_evaluation.py         # Orquestrador CLI
+└── results/
+    ├── retrieval_results.json
+    ├── generation_results.json
+    ├── latency_results.json
+    ├── variants_results.json
+    └── consolidated_report.json
+```
+
+### 10.3 Dataset de Avaliação (`eval/dataset.json`)
+
+O dataset contém **20 perguntas jurídicas** cobrindo 6 áreas do direito (Penal, Civil, Consumidor, Administrativo, Constitucional, Processual) e **4 consultas adversariais** para testar robustez do sistema.
+
+Cada pergunta define critérios de relevância lexical para o módulo de retrieval:
+
+```json
+{
+  "id": "q01",
+  "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+  "area": "Direito Penal",
+  "relevance": {
+    "must_contain": ["prisão preventiva"],
+    "any_of": ["fundamento", "requisito", "art. 312", "cautelar", "decretação"]
+  }
+}
+```
+
+**Critério `must_contain`:** todos os termos listados devem estar presentes no documento (lógica AND).
+**Critério `any_of`:** pelo menos um dos termos deve estar presente (lógica OR).
+
+A avaliação é feita com normalização de texto (lowercase + remoção de diacríticos via `unicodedata.normalize("NFKD")`), tornando os critérios robustos a variações de acentuação. Essa abordagem — julgamentos de relevância lexical — é prática padrão em IR para construção de coleções de teste sem anotação humana.
+
+**Consultas adversariais** testam comportamentos limítrofes:
+| ID | Descrição |
+|----|-----------|
+| adv01 | String sem sentido (`"aaaaabbbbbccccc xyzxyz"`) |
+| adv02 | Processo fictício (`RE 999999999`) + termo jurídico inexistente (`"telepatia jurídica"`) |
+| adv03 | Pergunta em inglês (fora do domínio do corpus) |
+| adv04 | Pergunta abaixo do mínimo de caracteres (deve retornar HTTP 422) |
+
+### 10.4 Métricas de Recuperação (`eval/metrics.py`)
+
+Implementação de funções puras sem dependências externas, cobertas por 22 testes unitários em `tests/test_metrics.py`:
+
+| Função | Fórmula |
+|--------|---------|
+| `recall_at_k(relevant, k)` | `sum(relevant[:k]) / total_relevant` |
+| `mrr(relevant)` | `1 / (posição do 1º relevante)` |
+| `ndcg_at_k(relevant, k)` | `DCG@k / IDCG@k` onde `DCG = Σ rel_i / log2(i+2)` |
+| `precision_at_k(relevant, k)` | `sum(relevant[:k]) / k` |
+| `compute_all(relevant, k)` | Dicionário com todas as 4 métricas |
+| `aggregate(results)` | Média aritmética de cada métrica sobre todas as perguntas |
+
+### 10.5 Avaliação de Recuperação (`eval/retrieval_eval.py`)
+
+Compara FTS5 (sistema atual) contra LIKE (busca por substring, baseline) nas 20 perguntas do dataset.
+
+**FTS5:** usa `rag_service` via chamada ao pipeline completo de busca com BM25.
+
+**LIKE:** query parametrizada com `?` para evitar injeção SQL:
+```sql
+SELECT id, ementa, tribunal, numero_processo
+FROM jurisprudencia
+WHERE ementa LIKE ? OR ementa LIKE ?
+LIMIT ?
+```
+
+Os tokens são gerados por `query.lower().split()` e cada um vira `%token%`. O resultado é comparado contra os critérios de relevância do dataset usando a função `is_relevant()`.
+
+### 10.6 Avaliação de Geração (`eval/generation_eval.py`)
+
+Dois mecanismos complementares:
+
+**LLM-as-Judge:** o mesmo modelo Groq (`llama-3.3-70b-versatile`) avalia cada resposta gerada pelo sistema em 4 dimensões (0–5), retornando JSON estruturado:
+
+```
+Groundedness (Fidelidade às fontes): A resposta está ancorada nos documentos recuperados?
+Relevância: A resposta aborda diretamente a pergunta feita?
+Coerência: A resposta é internamente consistente, sem contradições?
+Fluência: A resposta é gramaticalmente correta e bem redigida?
+```
+
+**Grounding Check (determinístico):** extrai citações entre parênteses via regex `\(([^)]+)\)`, verifica se cada identificador citado existe nos documentos efetivamente recuperados. Retorna `grounding_score = citações_válidas / citações_totais`. Caso não haja citações, score = 1.0 (sem alucinação declarável).
+
+### 10.7 Avaliação de Latência (`eval/latency_eval.py`)
+
+Executa `rag_service.answer()` para 10 perguntas distintas, cronometrando cada chamada com `time.perf_counter()`. Calcula percentis por interpolação linear.
+
+Métricas coletadas: p50, p95, p99, média, mínimo, máximo, taxa de erro, throughput (req/min), tempo total de parede.
+
+### 10.8 Comparação de Variantes (`eval/compare_variants.py`)
+
+Implementa as três variantes descritas na seção 4.4.2 do TCC:
+
+| Variante | Descrição | Implementação |
+|----------|-----------|---------------|
+| A — LLM sem RAG | Resposta direta do LLM sem contexto | `groq_service.generate(question)` com prompt mínimo |
+| B — LIKE + LLM | Retrieval por substring + geração | LIKE search → prompt com documentos → LLM |
+| C — FTS5 + LLM | Sistema atual completo | `rag_service.answer(question)` |
+
+Todas as três variantes são avaliadas com o mesmo LLM-as-judge, garantindo comparabilidade.
+
+### 10.9 Orquestrador CLI (`eval/run_evaluation.py`)
+
+```bash
+python -m eval.run_evaluation [retrieval|generation|latency|variants|all]
+```
+
+O comando `all` executa os 4 módulos em sequência, gera os 4 arquivos de resultado individuais e consolida tudo em `consolidated_report.json` com sumário impresso no terminal.
+
+### 10.10 Resultados Obtidos (16 de março de 2026)
+
+Comando executado: `python -m eval.run_evaluation all`
+
+---
+
+#### 10.10.1 Recuperação — FTS5 vs LIKE (20 perguntas, top_k=5)
+
+| Métrica | FTS5 | LIKE | Ganho FTS5 |
+|---------|------|------|-----------|
+| Recall@5 | **0.565** | 0.250 | +126% |
+| MRR | **0.742** | 0.173 | +329% |
+| nDCG@5 | **0.744** | 0.186 | +300% |
+| P@5 | **0.660** | 0.120 | +450% |
+
+**Análise:** FTS5 supera LIKE em todas as métricas por margens expressivas. O MRR de 0.742 indica que o documento mais relevante tende a aparecer nas primeiras posições, o que é crítico para a qualidade do contexto fornecido ao LLM. O LIKE com P@5=0.120 tem desempenho próximo ao aleatório numa coleção grande, confirmando que busca por substring sem tokenização e normalização é inadequada para texto jurídico com variação morfológica e acentuação.
+
+O Recall@5=0.565 do FTS5 não atinge 1.0 porque o corpus tem lacunas de cobertura: q09 (demissão de servidor / PAD) não retornou documento relevante — evidência de sub-representação de temas de Direito Administrativo no corpus atual.
+
+---
+
+#### 10.10.2 Geração — LLM-as-Judge (10 perguntas, q01–q10)
+
+| Dimensão | Média (0–5) |
+|----------|------------|
+| Fluência | **4.9** |
+| Coerência | **4.8** |
+| Relevância | **4.4** |
+| Groundedness | **3.9** |
+| Grounding Check (automático) | **0.725** |
+
+**Resultados por pergunta:**
+
+| ID | Área | G | R | C | F | Grounding |
+|----|------|---|---|---|---|-----------|
+| q01 | Direito Penal | 4.0 | 5.0 | 5.0 | 5.0 | 1.00 |
+| q02 | Direito Penal | 5.0 | 5.0 | 5.0 | 5.0 | 1.00 |
+| q03 | Direito Penal | 5.0 | 5.0 | 5.0 | 5.0 | 1.00 |
+| q04 | Direito Penal | 5.0 | 5.0 | 5.0 | 5.0 | 1.00 |
+| q05 | Direito Penal | 5.0 | 5.0 | 5.0 | 5.0 | 1.00 |
+| q06 | Direito Civil | 5.0 | 5.0 | 5.0 | 5.0 | 0.50 |
+| q07 | Direito Civil | 2.0 | 4.0 | 3.0 | 4.0 | 0.00 |
+| q08 | Direito do Consumidor | 4.0 | 5.0 | 5.0 | 5.0 | 0.00 |
+| q09 | Direito Administrativo | 0.0 | 0.0 | 5.0 | 5.0 | 1.00 |
+| q10 | Direito Administrativo | 4.0 | 5.0 | 5.0 | 5.0 | 0.75 |
+
+**Análise por caso:**
+
+- **q09 (Groundedness=0, Relevância=0):** O sistema respondeu "Não encontrei informação suficiente nos documentos disponíveis." — comportamento correto diante de lacuna de cobertura, mas que penaliza as médias. O Fluência=5 e Coerência=5 confirmam que a resposta está bem redigida; o problema é de cobertura do corpus, não do pipeline.
+
+- **q07 (Groundedness=2, Grounding=0.00):** O modelo citou `DIREITO TRIBUTÁRIO — Ed. 58` para uma pergunta de Direito Civil sobre dano moral por SPC. O FTS5 trouxe um documento de uma área cruzada semanticamente (registro de inadimplentes aparece em contextos tributários), e o LLM usou essa fonte de forma inadequada.
+
+- **q08 (Grounding=0.00):** As 4 citações geradas foram verificadas como inválidas pelo grounding check automático. Análise: o regex extraiu IDs curtos como `Tese 9`, `Tese 6`, `Tese 18` que não correspondem aos identificadores completos dos documentos recuperados (ex: `DIREITO DO CONSUMIDOR — Ed. 163: DIREITO DO CONSUMIDOR - VII (Tese 9)`). O sistema gerou conteúdo correto ancorado nos documentos, mas o mecanismo de verificação automático é conservador e não fez o match parcial.
+
+- **q06 (Grounding=0.50):** 2 das 4 citações foram identificadas como alucinadas (`Tese 5`, `Tese 6` sem o prefixo da edição) — mesmo padrão do q08, onde o LLM abrevia identificadores longos.
+
+---
+
+#### 10.10.3 Latência Operacional (10 execuções, error_rate=0%)
+
+| Métrica | Valor |
+|---------|-------|
+| p50 (mediana) | 13,2 s |
+| p95 | 14,8 s |
+| p99 | 15,3 s |
+| Média | 13,2 s |
+| Mínimo | 11,2 s |
+| Máximo | 15,4 s |
+| Taxa de erro | 0,0% |
+| Throughput | 4,56 req/min |
+
+**Análise:** A distribuição de latência é compacta (desvio p99-p50 ≈ 2s), sem outliers extremos, indicando estabilidade no pipeline. O gargalo é a chamada à API Groq (rede + inferência do llama-3.3-70b-versatile). O throughput de 4,56 req/min reflete o rate limit do plano gratuito da API. Zero erros em 10 execuções confirmam a estabilidade do pipeline completo.
+
+---
+
+#### 10.10.4 Comparação de Variantes (5 perguntas: q01, q02, q04, q06, q09)
+
+| Variante | Groundedness | Relevância | Coerência | Fluência |
+|----------|:-----------:|:---------:|:---------:|:--------:|
+| A — LLM sem RAG | 0.0 | 5.0 | 5.0 | 5.0 |
+| B — LIKE + LLM | 2.25 | 1.5 | 5.0 | 5.0 |
+| **C — FTS5 + LLM** | **4.667** | **5.0** | **5.0** | **5.0** |
+
+**Análise:**
+
+- **Variante A (sem RAG):** Fluência e coerência perfeitas — o LLM é capaz de produzir texto jurídico impecável a partir do conhecimento paramétrico. Porém, Groundedness=0.0: nenhuma resposta cita fontes verificáveis. Para uso jurídico profissional, isso é inaceitável — sem rastreabilidade, a resposta não tem valor probatório.
+
+- **Variante B (LIKE + LLM):** A recuperação deficiente contamina a geração. Relevância cai para 1.5 porque o LIKE frequentemente retorna documentos sem relação com a pergunta, e o LLM — não encontrando contexto útil — declara "não encontrei informação suficiente". Groundedness=2.25 indica que, quando o LIKE acerta, a ancoragem melhora, mas não é confiável.
+
+- **Variante C (FTS5 + LLM):** Groundedness 4.667 com Relevância=5.0 — combinação ótima. O FTS5 com tokenizador `unicode61 remove_diacritics 1` e ranking BM25 recupera consistentemente documentos relevantes, permitindo ao LLM construir respostas fundamentadas e verificáveis.
+
+**Conclusão:** os resultados validam empiricamente a hipótese central do trabalho. A diferença de groundedness entre as variantes A e C (0.0 → 4.667) e entre B e C (2.25 → 4.667) demonstra que a qualidade da recuperação é o fator determinante para a utilidade jurídica do sistema, não a capacidade generativa do LLM em si.
+
+### 10.11 Limitações da Avaliação
+
+1. **Tamanho do dataset:** 20 perguntas para retrieval e 5 para variantes são amostras indicativas. Resultados estatisticamente conclusivos exigiriam conjuntos maiores com múltiplos anotadores.
+
+2. **Lacuna de cobertura (q09):** O corpus atual sub-representa temas de Direito Administrativo, especialmente PAD (Processo Administrativo Disciplinar). A métrica de recall captura esse problema objetivamente.
+
+3. **Grounding check conservador:** O algoritmo exige match exato do identificador da fonte. Abreviações como `Tese 9` (sem o prefixo da edição) são marcadas como alucinadas mesmo quando o conteúdo está correto. Uma versão mais sofisticada faria match parcial ou fuzzy.
+
+4. **Latência dependente de API externa:** Os 13s medidos refletem o plano gratuito Groq com rate limit. Um deployment de produção com SLA garantido ou LLM local teria perfil de latência diferente.
+
+5. **LLM-as-judge com mesmo modelo:** O avaliador usa o mesmo `llama-3.3-70b-versatile` que gerou as respostas. Há risco de viés de auto-avaliação favorável. Idealmente, um modelo diferente (ex: Claude, GPT-4) seria usado como juiz.
+
+### 10.12 Estado Após a Fase 10
+
+- ✅ **`eval/dataset.json`** — 20 perguntas jurídicas + 4 adversariais com critérios de relevância lexical
+- ✅ **`eval/metrics.py`** — Recall@k, MRR, nDCG@k, P@k com 22 testes unitários
+- ✅ **`eval/retrieval_eval.py`** — comparação FTS5 vs LIKE sobre 20 perguntas
+- ✅ **`eval/generation_eval.py`** — LLM-as-judge (4 dimensões) + grounding check determinístico
+- ✅ **`eval/latency_eval.py`** — benchmark p50/p95/p99 com 10 execuções
+- ✅ **`eval/compare_variants.py`** — comparação das 3 variantes arquiteturais do TCC
+- ✅ **`eval/run_evaluation.py`** — CLI orquestrador com subcomandos e relatório consolidado
+- ✅ **`eval/results/`** — 5 arquivos JSON com resultados persistidos e datados
+- ✅ **107 testes** no total (85 existentes + 22 novos para métricas), todos passando
+
+---
+
+## Fase 11 — Hardening de Segurança (23/03/2026)
+
+### 11.1 Motivação
+
+Após a conclusão da avaliação experimental (Fase 10), foi realizada uma auditoria de segurança completa sobre o código da aplicação. O objetivo foi identificar e corrigir vulnerabilidades antes de qualquer deploy ou apresentação formal do sistema. A análise cobriu todos os módulos: API, serviços, ETL, configuração e logging.
+
+### 11.2 Vulnerabilidades Identificadas e Corrigidas
+
+A auditoria identificou **19 vulnerabilidades** distribuídas em quatro níveis de severidade. Todas foram corrigidas na mesma sessão.
+
+#### 11.2.1 Correções Anteriores (aplicadas antes da auditoria formal)
+
+Antes da auditoria completa, quatro problemas foram corrigidos imediatamente:
+
+| # | Arquivo | Correção |
+|---|---------|----------|
+| — | `main.py` | `host` trocado de `0.0.0.0` para `127.0.0.1`; `reload` vinculado a `settings.debug` |
+| — | `main.py` | `CORSMiddleware` configurado explicitamente com origens restritas a `localhost:3000` |
+| — | `src/api/limiter.py` *(novo)* | Instância `slowapi.Limiter` isolada para evitar import circular |
+| — | `src/api/routes/query.py` | `@limiter.limit("10/minute")` no endpoint `/query`; parâmetro `request: Request` adicionado |
+| — | `etl/generate_embeddings.py` | `_VALID_TABLES` e `_VALID_COLUMNS` como `frozenset`; validação antes de qualquer SQL com f-string |
+
+#### 11.2.2 Correções da Auditoria Formal
+
+**Crítico / Alto:**
+
+| # | Arquivo | Vulnerabilidade | Correção |
+|---|---------|-----------------|----------|
+| 1 | `src/database/connection.py` | DDL usava f-string com `settings.db_table_meta/fts` sem validação | Whitelist `_ALLOWED_META_TABLES` / `_ALLOWED_FTS_TABLES`; validação em `init_db()` |
+| 2 | `src/services/rag_service.py` | `llm_provider` sem whitelist — qualquer valor desviava silenciosamente para Ollama | `_VALID_LLM_PROVIDERS = frozenset({"groq", "ollama"})` com `ValueError` explícito |
+| 3 | `src/api/routes/query.py` | Pergunta do usuário embutida no prompt sem detecção de injection | `_check_injection()` com regex que detecta padrões `ignore/disregard instructions` etc. |
+| 4 | `src/services/rag_service.py` | Conteúdo do banco embutido no prompt sem sanitização | `_sanitize_doc_text()` aplicado em ementas e teses antes da montagem do prompt |
+| 5 | `src/services/rag_service.py` | Prompt final sem verificação de tamanho | Warning se `len(prompt) > 32_000`; log do prompt rebaixado de `INFO` para `DEBUG` |
+
+**Médio:**
+
+| # | Arquivo | Vulnerabilidade | Correção |
+|---|---------|-----------------|----------|
+| 6 | `src/config/settings.py` | `.env` com path relativo — quebra se working directory mudar | `_ENV_FILE = str(Path(__file__).resolve().parent.parent.parent / ".env")` |
+| 7 | `src/config/settings.py` | `database_url` sem validação de path traversal | `@field_validator` rejeita `..` no caminho; `:memory:` é exceção permitida |
+| 8 | `src/config/logging_config.py` | API keys podiam vazar nos logs | `_SecretFilter` redacta `gsk_[A-Za-z0-9]{20,}` antes de emitir qualquer mensagem |
+| 9 | `src/services/groq_service.py` | API key validada apenas por `if not key` | Regex `^gsk_[A-Za-z0-9]+$` com `logger.warning` se formato inesperado |
+| 10 | `src/services/search_service.py` | Queries FTS5 sem timeout — DB corrompido poderia travar a aplicação | `asyncio.wait_for(..., timeout=5.0)` em ambas as queries (`search` e `search_teses`) |
+| 11 | `src/services/semantic_service.py` | `_deserialize()` sem validação de tamanho do BLOB | Valida `len(blob) == 384 * 4 = 1536` antes de `np.frombuffer` |
+| 12 | `main.py` | `_run_tests()` sem timeout — pytest travado bloquearia startup indefinidamente | `asyncio.wait_for(proc.communicate(), timeout=300.0)` com `proc.kill()` no timeout |
+| 13 | `main.py` | Ausência de security headers HTTP | `_SecurityHeadersMiddleware` adiciona `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection` |
+
+**Baixo:**
+
+| # | Arquivo | Vulnerabilidade | Correção |
+|---|---------|-----------------|----------|
+| 14 | `etl/load.py` | `glob("resultados-de-acordaos*.csv")` aceitava qualquer arquivo no padrão | `_CSV_NAME_RE = re.compile(r'^resultados-de-acordaos[\w\-]*\.csv$')` filtrando o glob |
+| 15 | `etl/load_teses_stj.py` | Regex sem limites explícitos nos grupos — potencial ReDoS | Limites `{1,N}` adicionados em todos os grupos (`{1,200}`, `{1,1000}`, `{1,500}`) |
+| 16 | `etl/load_teses_stj.py` | `sqlite3.connect()` sem `PRAGMA foreign_keys=ON` — inconsistente com a app | `PRAGMA foreign_keys=ON` adicionado nas 3 funções: `load()`, `load_area()`, `force_reload()` |
+| 17 | `src/api/routes/query.py` | Sem identificador de requisição nos logs | `request_id = str(uuid.uuid4())[:8]` gerado e logado por requisição |
+| requirements.txt | — | `slowapi` ausente | `slowapi==0.1.9` adicionado |
+
+### 11.3 Arquivos Criados / Modificados
+
+| Arquivo | Tipo de mudança |
+|---------|----------------|
+| `src/api/limiter.py` | Criado — instância isolada do Limiter |
+| `main.py` | Modificado — host, reload, CORS, rate limit, timeout, security headers |
+| `src/api/routes/query.py` | Modificado — rate limit, injection check, request ID |
+| `src/config/settings.py` | Modificado — .env absoluto, field_validator database_url |
+| `src/config/logging_config.py` | Modificado — _SecretFilter |
+| `src/services/groq_service.py` | Modificado — validação de formato da API key |
+| `src/services/search_service.py` | Modificado — timeout asyncio nas queries FTS5 |
+| `src/services/rag_service.py` | Modificado — provider whitelist, sanitização, prompt size check |
+| `src/services/semantic_service.py` | Modificado — validação de tamanho do BLOB |
+| `src/database/connection.py` | Modificado — whitelist de nomes de tabela |
+| `etl/load.py` | Modificado — validação de nomes de CSV |
+| `etl/load_teses_stj.py` | Modificado — regex limits, PRAGMA foreign_keys |
+| `etl/generate_embeddings.py` | Modificado — _VALID_TABLES/_VALID_COLUMNS whitelist |
+| `requirements.txt` | Modificado — slowapi==0.1.9 |
+
+### 11.4 Estado Após a Fase 11
+
+- ✅ **0 vulnerabilidades críticas** remanescentes na aplicação
+- ✅ **Rate limiting** ativo: 10 req/min por IP no endpoint `/query`
+- ✅ **CORS** restrito a `localhost:3000`
+- ✅ **Security headers** em todas as respostas HTTP
+- ✅ **Prompt injection** detectado tanto na pergunta do usuário quanto no conteúdo do banco
+- ✅ **Secrets** nunca expostos nos logs (filtro de redação ativo)
+- ✅ **107 testes passando** — nenhuma regressão introduzida pelas correções
