@@ -1,0 +1,860 @@
+{
+  "top_k": 5,
+  "n_questions": 20,
+  "results": [
+    {
+      "id": "q01",
+      "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q02",
+      "question": "O habeas corpus pode ser utilizado como substitutivo de recurso ordinário?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.7142857142857143,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 7,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q03",
+      "question": "É cabível habeas corpus contra decisão monocrática de Ministro de Tribunal Superior?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.8333333333333334,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 6,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q04",
+      "question": "A ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.7142857142857143,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 7,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q05",
+      "question": "Qual o regime inicial de cumprimento de pena para o crime de tráfico de drogas?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q06",
+      "question": "O plano de saúde pode limitar o tipo de tratamento médico para doenças cobertas?",
+      "area": "Direito Civil",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.16666666666666666,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 8,
+        "relevant_count": 3,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q07",
+      "question": "Existe presunção de dano moral por inscrição indevida em cadastro de inadimplentes?",
+      "area": "Direito Civil",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.16666666666666666,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 8,
+        "relevant_count": 2,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q08",
+      "question": "Qual a responsabilidade do fornecedor por defeito do produto fabricado?",
+      "area": "Direito do Consumidor",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.16666666666666666,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 8,
+        "relevant_count": 1,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q09",
+      "question": "A demissão de servidor público efetivo sem processo administrativo disciplinar é válida?",
+      "area": "Direito Administrativo",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.6666666666666666,
+          "MRR": 0.5,
+          "nDCG@5": 0.7606395682357036,
+          "P@5": 0.8
+        },
+        "retrieved": 8,
+        "relevant_count": 6,
+        "relevance_flags": [
+          false,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q10",
+      "question": "Qual o entendimento sobre a estabilidade do servidor público aprovado em concurso?",
+      "area": "Direito Administrativo",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 1.0,
+          "MRR": 0.2,
+          "nDCG@5": 0.38685280723454163,
+          "P@5": 0.2
+        },
+        "retrieved": 8,
+        "relevant_count": 1,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q11",
+      "question": "Quais são os limites constitucionais à liberdade de expressão?",
+      "area": "Direito Constitucional",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.8,
+          "MRR": 1.0,
+          "nDCG@5": 0.9828920819566879,
+          "P@5": 0.8
+        },
+        "retrieved": 8,
+        "relevant_count": 5,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q12",
+      "question": "Quais são os requisitos para reconhecimento da repercussão geral no recurso extraordinário?",
+      "area": "Direito Processual",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.75,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 0.6
+        },
+        "retrieved": 8,
+        "relevant_count": 4,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 1.0,
+          "MRR": 0.3333333333333333,
+          "nDCG@5": 0.6182885020492784,
+          "P@5": 0.6
+        },
+        "retrieved": 5,
+        "relevant_count": 3,
+        "relevance_flags": [
+          false,
+          false,
+          true,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "id": "q13",
+      "question": "O contraditório e a ampla defesa se aplicam ao processo administrativo?",
+      "area": "Direito Constitucional",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q14",
+      "question": "A decisão judicial sem fundamentação adequada é nula?",
+      "area": "Direito Processual",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 1.0,
+          "MRR": 1.0,
+          "nDCG@5": 0.9828920819566879,
+          "P@5": 0.8
+        },
+        "retrieved": 8,
+        "relevant_count": 4,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q15",
+      "question": "O habeas corpus é inadmissível quando há supressão de instância?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q16",
+      "question": "É possível cumular dano moral e dano material em acidente de trânsito?",
+      "area": "Direito Civil",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 1.0,
+          "MRR": 0.3333333333333333,
+          "nDCG@5": 0.5,
+          "P@5": 0.2
+        },
+        "retrieved": 5,
+        "relevant_count": 1,
+        "relevance_flags": [
+          false,
+          false,
+          true,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q17",
+      "question": "Há jurisprudência sobre revisão de contrato bancário por juros abusivos?",
+      "area": "Direito Civil",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.6,
+          "MRR": 1.0,
+          "nDCG@5": 0.9674679834891693,
+          "P@5": 0.6
+        },
+        "retrieved": 8,
+        "relevant_count": 5,
+        "relevance_flags": [
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          false,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q18",
+      "question": "O sigilo bancário pode ser quebrado por autoridade fiscal sem autorização judicial?",
+      "area": "Direito Constitucional",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.5,
+          "MRR": 1.0,
+          "nDCG@5": 0.9197207891481876,
+          "P@5": 0.4
+        },
+        "retrieved": 8,
+        "relevant_count": 4,
+        "relevance_flags": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "id": "q19",
+      "question": "Qual o cabimento do agravo interno contra decisão monocrática no STF?",
+      "area": "Direito Processual",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.625,
+          "MRR": 1.0,
+          "nDCG@5": 1.0,
+          "P@5": 1.0
+        },
+        "retrieved": 8,
+        "relevant_count": 8,
+        "relevance_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 1.0,
+          "MRR": 1.0,
+          "nDCG@5": 0.9558295932317544,
+          "P@5": 0.8
+        },
+        "retrieved": 5,
+        "relevant_count": 4,
+        "relevance_flags": [
+          true,
+          true,
+          false,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "id": "q20",
+      "question": "É possível a execução da pena após condenação em segunda instância antes do trânsito em julgado?",
+      "area": "Direito Penal",
+      "fts5": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 8,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      },
+      "like": {
+        "metrics": {
+          "Recall@5": 0.0,
+          "MRR": 0.0,
+          "nDCG@5": 0.0,
+          "P@5": 0.0
+        },
+        "retrieved": 5,
+        "relevant_count": 0,
+        "relevance_flags": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "fts5": {
+      "Recall@5": 0.5664285714285715,
+      "MRR": 0.76,
+      "nDCG@5": 0.7500232656010489,
+      "P@5": 0.6599999999999999
+    },
+    "like": {
+      "Recall@5": 0.15,
+      "MRR": 0.08333333333333333,
+      "nDCG@5": 0.10370590476405164,
+      "P@5": 0.08
+    }
+  }
+}

@@ -1607,3 +1607,154 @@ Antes da auditoria completa, quatro problemas foram corrigidos imediatamente:
 - ✅ **Prompt injection** detectado tanto na pergunta do usuário quanto no conteúdo do banco
 - ✅ **Secrets** nunca expostos nos logs (filtro de redação ativo)
 - ✅ **107 testes passando** — nenhuma regressão introduzida pelas correções
+
+---
+
+## Fase 12 — Busca Semântica Híbrida (25/03/2026)
+
+### 12.1 Motivação
+
+Após a fase de hardening, o sistema operava com busca puramente lexical (FTS5/BM25). A limitação central desse modelo é o **vocabulary mismatch**: se o usuário pergunta "pena restritiva de liberdade" e o acórdão usa "medida cautelar prisional", a busca BM25 falha. A solução clássica é adicionar busca semântica (embeddings) e fundir os resultados.
+
+A busca semântica estava prevista no TCC1 e foi implementada nesta fase como o principal avanço técnico do trabalho.
+
+### 12.2 Expansão da Base de Conhecimento
+
+Antes de implementar a semântica, o corpus foi expandido significativamente:
+
+#### 12.2.1 Ampliação dos acórdãos STF
+
+| Estado anterior | Estado novo |
+|---|---|
+| 2.241 acórdãos (só dezembro/2025) | 3.420 acórdãos (set/2025 – mar/2026) |
+| 1 arquivo CSV | 18 arquivos CSV |
+
+O ETL foi corrigido — a versão anterior assumia que os arquivos eram cumulativos e carregava apenas o maior numerado. A correção em `etl/load.py` passou a coletar todos os CSVs com `glob("resultados-de-acordaos*.csv")`.
+
+#### 12.2.2 Adição de súmulas STJ
+
+- `data/stj/SelecaoSumulas.txt` — 676 súmulas STJ
+- Novo ETL: `etl/load_sumulas_stj.py`
+- Armazenadas na tabela `teses_stj` com `area='SÚMULAS STJ'`
+- Identificadas no prompt como `[Súmula STJ NNN]` e citadas como `Súmula NNN/STJ`
+
+#### 12.2.3 Adição de teses de Direito do Consumidor
+
+- `data/stj/jurispruConsumidor.txt` — edições 161–164 (100 teses)
+- Função `load_area()` adicionada ao `etl/load_teses_stj.py` para recarregar apenas uma área sem apagar as demais
+
+**Corpus final:**
+
+| Fonte | Documentos |
+|---|---|
+| Acórdãos STF | 3.420 |
+| Teses STJ (Jurisprudência em Teses) | 3.378 |
+| Súmulas STJ | 676 |
+| **Total** | **7.474** |
+
+### 12.3 Arquitetura da Busca Semântica
+
+#### 12.3.1 Modelo de embeddings
+
+- **Modelo:** `paraphrase-multilingual-MiniLM-L12-v2` (sentence-transformers)
+- **Dimensão:** 384
+- **Normalização:** `normalize_embeddings=True` (cosine similarity → dot product)
+- **Justificativa:** multilingual, CPU-friendly (~90 MB), suporte nativo a português jurídico
+
+#### 12.3.2 Geração de embeddings (ETL)
+
+Novo arquivo: `etl/generate_embeddings.py`
+
+- Adiciona coluna `embedding BLOB` nas tabelas `jurisprudencia` e `teses_stj`
+- Processa apenas linhas com `embedding IS NULL` (idempotente)
+- Serialização: `struct.pack(f"{len(v)}f", *v)` → BLOB de 1536 bytes por vetor
+- Textos truncados: acórdãos a 1000 chars, teses a 500 chars
+- Batch size: 64
+
+#### 12.3.3 Cache em memória
+
+Ao iniciar a primeira consulta semântica, `semantic_service.py` carrega todos os embeddings do banco para arrays NumPy em memória:
+
+```
+_acordao_cache: (ids[], metadados[], np.ndarray [N×384])
+_teses_cache:   (ids[], metadados[], np.ndarray [M×384])
+```
+
+- Tamanho: ~11 MB para 7.474 documentos × 384 dims × 4 bytes
+- Carregado uma vez por processo, reutilizado em todas as consultas
+- `clear_cache()` disponível para invalidação manual
+
+#### 12.3.4 Busca por similaridade
+
+```python
+# Vetores normalizados → dot product = cosine similarity
+scores = matrix @ query_vec          # shape [N]
+top_idx = np.argpartition(scores, -top_k)[-top_k:]  # O(N) vs O(N log N)
+```
+
+#### 12.3.5 Reciprocal Rank Fusion (RRF)
+
+Funde os rankings lexical (FTS5) e semântico:
+
+```
+score(d) = 1/(k + rank_lexical + 1) + 1/(k + rank_semantic + 1)    k=60
+```
+
+Pipeline completo:
+1. FTS5 busca top-15 acórdãos + top-15 teses
+2. Semântica busca top-15 acórdãos + top-15 teses (em paralelo via `asyncio.gather`)
+3. RRF funde e seleciona top-6 acórdãos + top-3 teses para o prompt
+
+### 12.4 Mudanças nos Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `etl/generate_embeddings.py` | Novo — ETL de vetorização do corpus |
+| `src/services/semantic_service.py` | Novo — cache NumPy + cosine similarity + RRF |
+| `src/services/rag_service.py` | `answer()` reescrito para pipeline híbrido com 4 buscas paralelas |
+| `eval/compare_variants.py` | Variante C (FTS5-only) separada da Variante D (Híbrido) |
+| `eval/run_evaluation.py` | Relatório consolidado atualizado para 4 variantes |
+| `data/stj/` | Novo diretório — `JTSelecao.txt`, `SelecaoSumulas.txt`, `jurispruConsumidor.txt` |
+| `etl/load_sumulas_stj.py` | Novo — parser de súmulas STJ |
+| `etl/load_teses_stj.py` | `load_area()` adicionada; path atualizado para `data/stj/` |
+
+### 12.5 Correção do Framework de Avaliação
+
+Durante a implementação, foram identificados e corrigidos 3 bugs no framework de avaliação:
+
+| Bug | Causa | Correção |
+|---|---|---|
+| Grounding check falhava em teses com parênteses aninhados | Regex `\(([^)]{5,80})\)` parava no `)`interno de `(Tese 8)` | Regex `\(([^()]*(?:\([^()]*\)[^()]*)*)\)` |
+| Modelo citava rótulo `[Acórdão STF N]` em vez do número do processo | Instrução ambígua no prompt | "cite SOMENTE o número do processo... NUNCA use o rótulo" |
+| ETL carregava apenas 2 de 18 CSVs | Assumia arquivos cumulativos | `return all_csvs` (lista completa) |
+
+### 12.6 Resultados da Avaliação
+
+#### 12.6.1 Avaliação de geração (10 queries, híbrido)
+
+| Dimensão | Score |
+|---|---|
+| Groundedness | 3.30/5.0 |
+| Relevância | 4.60/5.0 |
+| Coerência | 4.90/5.0 |
+| Fluência | 5.00/5.0 |
+| Grounding score | 0.975/1.0 |
+
+#### 12.6.2 Comparação de variantes (5 queries, A/B/C/D)
+
+| Variante | Groundedness | Relevância | Coerência | Fluência |
+|---|---|---|---|---|
+| A — LLM sem RAG | 0.000 | 5.000 | 5.000 | 5.000 |
+| B — LIKE + LLM | 0.000 | 0.000 | 5.000 | 5.000 |
+| C — FTS5 + LLM | 3.400 | 4.000 | 5.000 | 5.000 |
+| **D — Híbrido + LLM** | **4.800** | **5.000** | **5.000** | **5.000** |
+
+**Conclusão:** o pipeline híbrido entrega +1.4 de groundedness e +1.0 de relevância em relação ao FTS5-only, validando a hipótese central do TCC. A busca semântica resolve o vocabulary mismatch que o BM25 não consegue cobrir.
+
+### 12.7 Estado Após a Fase 12
+
+- ✅ **7.474 documentos** vetorizados e indexados (FTS5 + embeddings)
+- ✅ **Pipeline híbrido** FTS5 + semântica + RRF em produção
+- ✅ **Comparação A/B/C/D** implementada no framework de avaliação
+- ✅ **Groundedness 4.8/5.0** — melhor resultado do projeto até agora
+- ⬜ Reranking cross-encoder (próxima fase)

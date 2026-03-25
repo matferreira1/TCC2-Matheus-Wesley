@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS jurisprudencia (
     ementa           TEXT,
     decisao          TEXT,
     data_julgamento  TEXT,
+    embedding        BLOB,
     created_at       TEXT    DEFAULT (datetime('now'))
 );
 """
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS teses_stj (
     tese_num       INTEGER,
     tese_texto     TEXT,
     julgados       TEXT,
+    embedding      BLOB,
     created_at     TEXT DEFAULT (datetime('now'))
 );
 """

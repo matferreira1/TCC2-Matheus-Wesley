@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m etl.load_teses_stj data/stj/jurispruConsumidor.txt --force)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(python -c \"from etl.generate_embeddings import _embed_table, _VALID_TABLES; print\\(''ETL OK:'', _VALID_TABLES\\)\")",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python -c \"from eval.compare_variants import run; print\\(''OK''\\)\")",
+      "Bash(python -m eval.run_evaluation variants --questions q01,q02,q04,q06,q09)"
+    ]
+  }
+}

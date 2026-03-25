@@ -1,0 +1,208 @@
+{
+  "version": "1.0",
+  "description": "Conjunto de 20 consultas jurídicas representativas para avaliação do IAJuris. Os julgamentos de relevância são léxicos: um documento é relevante se contém todos os termos de 'must_contain' E pelo menos um de 'any_of'.",
+  "questions": [
+    {
+      "id": "q01",
+      "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["prisão preventiva"],
+        "any_of": ["fundamento", "requisito", "art. 312", "cautelar", "decretação", "necessidade", "conveniência"]
+      }
+    },
+    {
+      "id": "q02",
+      "question": "O habeas corpus pode ser utilizado como substitutivo de recurso ordinário?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["habeas corpus"],
+        "any_of": ["substitutivo", "sucedâneo", "recurso ordinário", "não se admite", "inadequado", "via inadequada"]
+      }
+    },
+    {
+      "id": "q03",
+      "question": "É cabível habeas corpus contra decisão monocrática de Ministro de Tribunal Superior?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["habeas corpus"],
+        "any_of": ["monocrática", "ministro", "tribunal superior", "decisão singular", "não cabe", "não conhecido"]
+      }
+    },
+    {
+      "id": "q04",
+      "question": "A ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["prisão preventiva"],
+        "any_of": ["fundamentação", "constrangimento ilegal", "ausência", "motivação", "idônea", "adequada"]
+      }
+    },
+    {
+      "id": "q05",
+      "question": "Qual o regime inicial de cumprimento de pena para o crime de tráfico de drogas?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["tráfico"],
+        "any_of": ["regime", "pena", "cumprimento", "hediondo", "fechado", "inicial", "equiparado"]
+      }
+    },
+    {
+      "id": "q06",
+      "question": "O plano de saúde pode limitar o tipo de tratamento médico para doenças cobertas?",
+      "area": "Direito Civil",
+      "relevance": {
+        "must_contain": ["plano de saúde"],
+        "any_of": ["tratamento", "cobertura", "limitação", "tipo", "procedimento", "recusa", "negar"]
+      }
+    },
+    {
+      "id": "q07",
+      "question": "Existe presunção de dano moral por inscrição indevida em cadastro de inadimplentes?",
+      "area": "Direito Civil",
+      "relevance": {
+        "must_contain": ["dano moral"],
+        "any_of": ["cadastro", "inadimplente", "inscrição", "SPC", "Serasa", "negativação", "indevida"]
+      }
+    },
+    {
+      "id": "q08",
+      "question": "Qual a responsabilidade do fornecedor por defeito do produto fabricado?",
+      "area": "Direito do Consumidor",
+      "relevance": {
+        "must_contain": ["fornecedor"],
+        "any_of": ["defeito", "produto", "fabricação", "responsabilidade", "projeto", "consumidor"]
+      }
+    },
+    {
+      "id": "q09",
+      "question": "A demissão de servidor público efetivo sem processo administrativo disciplinar é válida?",
+      "area": "Direito Administrativo",
+      "relevance": {
+        "must_contain": ["servidor público"],
+        "any_of": ["demissão", "processo administrativo", "disciplinar", "PAD", "cargo efetivo", "nulidade"]
+      }
+    },
+    {
+      "id": "q10",
+      "question": "Qual o entendimento sobre a estabilidade do servidor público aprovado em concurso?",
+      "area": "Direito Administrativo",
+      "relevance": {
+        "must_contain": ["servidor público"],
+        "any_of": ["estabilidade", "cargo efetivo", "concurso público", "nomeação", "efetivo"]
+      }
+    },
+    {
+      "id": "q11",
+      "question": "Quais são os limites constitucionais à liberdade de expressão?",
+      "area": "Direito Constitucional",
+      "relevance": {
+        "must_contain": ["liberdade de expressão"],
+        "any_of": ["limite", "restrição", "discurso", "manifestação", "colisão", "direito fundamental"]
+      }
+    },
+    {
+      "id": "q12",
+      "question": "Quais são os requisitos para reconhecimento da repercussão geral no recurso extraordinário?",
+      "area": "Direito Processual",
+      "relevance": {
+        "must_contain": ["repercussão geral"],
+        "any_of": ["recurso extraordinário", "requisito", "reconhecimento", "constitucional", "relevância", "transcendência"]
+      }
+    },
+    {
+      "id": "q13",
+      "question": "O contraditório e a ampla defesa se aplicam ao processo administrativo?",
+      "area": "Direito Constitucional",
+      "relevance": {
+        "must_contain": ["contraditório"],
+        "any_of": ["ampla defesa", "processo administrativo", "garantia", "princípio", "devido processo"]
+      }
+    },
+    {
+      "id": "q14",
+      "question": "A decisão judicial sem fundamentação adequada é nula?",
+      "area": "Direito Processual",
+      "relevance": {
+        "must_contain": ["fundamentação"],
+        "any_of": ["nulidade", "ausência", "decisão", "motivação", "vício", "nula", "inidônea"]
+      }
+    },
+    {
+      "id": "q15",
+      "question": "O habeas corpus é inadmissível quando há supressão de instância?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["habeas corpus"],
+        "any_of": ["supressão de instância", "supressão", "inadmissível", "não conhecido", "instância"]
+      }
+    },
+    {
+      "id": "q16",
+      "question": "É possível cumular dano moral e dano material em acidente de trânsito?",
+      "area": "Direito Civil",
+      "relevance": {
+        "must_contain": ["dano"],
+        "any_of": ["cumulação", "cumulado", "acidente", "trânsito", "material", "moral", "indenização"]
+      }
+    },
+    {
+      "id": "q17",
+      "question": "Há jurisprudência sobre revisão de contrato bancário por juros abusivos?",
+      "area": "Direito Civil",
+      "relevance": {
+        "must_contain": ["juros"],
+        "any_of": ["abusivo", "banco", "contrato", "revisão", "taxa", "onerosidade excessiva", "financeiro"]
+      }
+    },
+    {
+      "id": "q18",
+      "question": "O sigilo bancário pode ser quebrado por autoridade fiscal sem autorização judicial?",
+      "area": "Direito Constitucional",
+      "relevance": {
+        "must_contain": ["sigilo"],
+        "any_of": ["bancário", "fiscal", "autoridade", "quebra", "autorização", "judicial", "Receita"]
+      }
+    },
+    {
+      "id": "q19",
+      "question": "Qual o cabimento do agravo interno contra decisão monocrática no STF?",
+      "area": "Direito Processual",
+      "relevance": {
+        "must_contain": ["agravo"],
+        "any_of": ["interno", "regimental", "cabimento", "monocrática", "decisão singular", "recurso"]
+      }
+    },
+    {
+      "id": "q20",
+      "question": "É possível a execução da pena após condenação em segunda instância antes do trânsito em julgado?",
+      "area": "Direito Penal",
+      "relevance": {
+        "must_contain": ["segunda instância"],
+        "any_of": ["execução", "condenação", "pena", "prisão", "trânsito em julgado", "cumprimento"]
+      }
+    }
+  ],
+  "adversarial": [
+    {
+      "id": "adv01",
+      "question": "aaaaabbbbbccccc xyzxyz zzzzz",
+      "description": "consulta sem sentido — espera-se resposta de fallback sem alucinação"
+    },
+    {
+      "id": "adv02",
+      "question": "Qual a decisão do STF no processo RE 999999999 sobre telepatia jurídica?",
+      "description": "processo inexistente — espera-se fallback sem inventar conteúdo"
+    },
+    {
+      "id": "adv03",
+      "question": "What is the legal position on criminal liability in Brazilian law?",
+      "description": "consulta em inglês — sistema deve responder em português"
+    },
+    {
+      "id": "adv04",
+      "question": "A",
+      "description": "consulta abaixo do mínimo de caracteres — deve ser rejeitada pela API (422)"
+    }
+  ]
+}

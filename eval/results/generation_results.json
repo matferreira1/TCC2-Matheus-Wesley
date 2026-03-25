@@ -1,0 +1,236 @@
+{
+  "n_questions": 10,
+  "results": [
+    {
+      "id": "q01",
+      "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+      "area": "Direito Penal",
+      "answer": "Os fundamentos para a decretação da prisão preventiva incluem:\n1. Garantia da ordem pública, que pode ser justificada pela gravidade concreta do delito, periculosidade do agente, modus operandi e reiteração delitiva (HC 262726 AgR; HC 266082 AgR; HC 264273 AgR; HC 264438 AgR; HC 264964 AgR).\n2. A existência de inquéritos ou processos em andamento pode demonstrar a probabilidade de reiteração delitiva, justificando a prisão preventiva (HC 266082 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).\n3. A necessidade de impedir a reiteração delitiva e a periculosidade do agente são fundamentos idôneos para a manutenção da prisão preventiva (HC 264438 AgR; HC 264964 AgR).\n4. A decretação da prisão preventiva pode ser fundamentada na garantia da ordem pública, quando há indícios de que o agente está envolvido em organização criminosa (HC 264964 AgR).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 5.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e legibilidade em português jurídico.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 10,
+        "citations_valid": 10,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q02",
+      "question": "O habeas corpus pode ser utilizado como substitutivo de recurso ordinário?",
+      "area": "Direito Penal",
+      "answer": "O habeas corpus não pode ser utilizado como sucedâneo de revisão criminal ou como substitutivo de recurso ordinário, salvo em hipóteses excepcionais de manifesta ilegalidade (RHC 263988 AgR; RHC 264567 AgR; RHC 264563 AgR; RHC 264358 AgR; RHC 263834 AgR; RHC 266016 AgR; DIREITO PROCESSUAL PENAL — Ed. 36: HABEAS CORPUS (Tese 5)).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 5.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e correção gramatical.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 7,
+        "citations_valid": 7,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q03",
+      "question": "É cabível habeas corpus contra decisão monocrática de Ministro de Tribunal Superior?",
+      "area": "Direito Penal",
+      "answer": "Não, não é cabível habeas corpus contra decisão monocrática de Ministro de Tribunal Superior, pois isso configuraria supressão de instância (HC 265215 AgR; HC 264509 AgR; HC 266001 AgR; HC 266275 AgR; HC 264087 AgR; HC 266661 AgR).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 5.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, é direta e clara, não apresenta contradições e está gramaticalmente correta.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 6,
+        "citations_valid": 6,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q04",
+      "question": "A ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal?",
+      "area": "Direito Penal",
+      "answer": "A ausência de fundamentação na decisão que decreta a prisão preventiva pode configurar constrangimento ilegal, pois o decreto prisional deve ser considerado fundamentado quando demonstra elementos concretos que evidenciam a necessidade da custódia para garantia da ordem pública, conveniência da instrução criminal ou aplicação da lei penal (HC 262726 AgR; HC 264975 AgR; HC 265624 AgR).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 5.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda diretamente a pergunta e é internamente consistente, clara e gramaticalmente correta.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 3,
+        "citations_valid": 3,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q05",
+      "question": "Qual o regime inicial de cumprimento de pena para o crime de tráfico de drogas?",
+      "area": "Direito Penal",
+      "answer": "O regime inicial de cumprimento de pena para o crime de tráfico de drogas não está condicionado somente ao quantum da reprimenda, mas também ao exame das circunstâncias judiciais do artigo 42 da Lei de Drogas e artigo 59 do Código Penal (HC 265565 AgR; HC 263997 AgR). Além disso, é possível a fixação de regime prisional diferente do fechado para o início do cumprimento de pena imposta ao condenado por tráfico de drogas, devendo o magistrado observar as regras previstas nos arts. 33 e 59 do Código Penal (DIREITO PENAL — Ed. 45: LEI DE DROGAS (Tese 7); DIREITO PENAL — Ed. 131: COMPILADO: LEI DE DROGAS (Tese 49)). A quantidade e a natureza das drogas apreendidas são circunstâncias aptas para manter a exasperação da pena-base e o regime de cumprimento da pena mais gravoso (HC 263997 AgR).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 5.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e correção gramatical.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 5,
+        "citations_valid": 5,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q06",
+      "question": "O plano de saúde pode limitar o tipo de tratamento médico para doenças cobertas?",
+      "area": "Direito Civil",
+      "answer": "Não, o plano de saúde não pode limitar o tipo de tratamento médico para doenças cobertas, pois é abusiva a cláusula contratual que exclui tratamento essencial para garantir a saúde ou a vida do segurado (DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3); DIREITO CIVIL — Ed. 2: PLANOS DE SAÚDE - I (Tese 5); DIREITO CIVIL — Ed. 271: PLANOS DE SAÚDE V (Tese 10)).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 0.0,
+        "relevancia": 4.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta não está apoiada nas passagens recuperadas, mas aborda adequadamente a pergunta e é coerente e fluente em sua estrutura.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 3,
+        "citations_valid": 3,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q07",
+      "question": "Existe presunção de dano moral por inscrição indevida em cadastro de inadimplentes?",
+      "area": "Direito Civil",
+      "answer": "Sim, existe presunção de dano moral por inscrição indevida em cadastro de inadimplentes (DIREITO TRIBUTÁRIO — Ed. 58: PIS E COFINS (Tese 1)).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 0.0,
+        "relevancia": 2.0,
+        "coerencia": 4.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta não está apoiada nas passagens recuperadas, mas aborda a pergunta de forma coerente e clara, embora com limitações na relevância direta para o contexto fornecido.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 1,
+        "citations_valid": 1,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q08",
+      "question": "Qual a responsabilidade do fornecedor por defeito do produto fabricado?",
+      "area": "Direito do Consumidor",
+      "answer": "A responsabilidade do fornecedor por defeito do produto fabricado é objetiva, ou seja, não depende da comprovação de culpa ou dolo do fornecedor. Isso significa que o fornecedor é responsável pelos danos causados pelo produto, independentemente de ter agido com negligência ou intenção.\n\nAlém disso, a responsabilidade pode ser solidária entre os envolvidos na cadeia de produção e comercialização do produto, incluindo fabricantes, fornecedores e concessionárias.\n\nEssa responsabilidade abrange não apenas a qualidade do produto em si, mas também a informação adequada sobre os possíveis efeitos colaterais e reações adversas, conforme estabelecido no Código de Defesa do Consumidor (CDC).\n\n(DIREITO DO CONSUMIDOR — Ed. 163: DIREITO DO CONSUMIDOR - VII (Tese 9); DIREITO DO CONSUMIDOR — Ed. 42: DIREITO DO CONSUMIDOR II (Tese 6); DIREITO DO CONSUMIDOR — Ed. 74: DIREITO DO CONSUMIDOR III (Tese 18))",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 0.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta é relevante, coerente e fluente, mas não está apoiada nas passagens recuperadas, que não abordam diretamente a responsabilidade do fornecedor por defeito do produto fabricado.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 4,
+        "citations_valid": 3,
+        "citations_hallucinated": 1,
+        "hallucinated_list": [
+          "CDC"
+        ],
+        "grounding_score": 0.75
+      }
+    },
+    {
+      "id": "q09",
+      "question": "A demissão de servidor público efetivo sem processo administrativo disciplinar é válida?",
+      "area": "Direito Administrativo",
+      "answer": "Não, a demissão de servidor público efetivo sem processo administrativo disciplinar não é válida (RE 1549760 AgR; RMS 40030 AgR; RMS 40547 AgR; RE 1581323 AgR; RMS 39323 ED-AgR; MS 38411 ED; DIREITO ADMINISTRATIVO — Ed. 1: PROCESSO ADMINISTRATIVO DISCIPLINAR - I (Tese 7); DIREITO ADMINISTRATIVO — Ed. 154: COMPILADO: PROCESSO ADMINISTRATIVO DISCIPLINAR (Tese 33); DIREITO ADMINISTRATIVO — Ed. 142: PROCESSO ADMINISTRATIVO DISCIPLINAR - V (Tese 7)).",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 4.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está bem apoiada nas passagens recuperadas, aborda diretamente a pergunta e é internamente consistente, mas poderia ser mais detalhada em sua justificativa.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 9,
+        "citations_valid": 9,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    },
+    {
+      "id": "q10",
+      "question": "Qual o entendimento sobre a estabilidade do servidor público aprovado em concurso?",
+      "area": "Direito Administrativo",
+      "answer": "O entendimento sobre a estabilidade do servidor público aprovado em concurso pode ser sintetizado nos seguintes pontos:\n\n1. A aprovação em concurso público dentro do número de vagas previsto no edital confere direito subjetivo à nomeação, ressalvadas situações excepcionalíssimas e devidamente motivadas (RE 1316010; RE 1570584 ED).\n2. A estabilidade excepcional do art. 19 do ADCT não autoriza a titularização de cargos de provimento por servidores não concursados sem o prévio concurso público (RE 1476905; RE 1370210 ED; AR 3118 AgR).\n3. A criação de mais cargos, por si só, não confere direito subjetivo ao candidato aprovado fora do número de vagas previsto no edital do concurso público (RE 1570584 ED; DIREITO ADMINISTRATIVO — Ed. 76: SERVIDOR PÚBLICO - II (Tese 8)).\n4. A estabilidade excepcional do art. 19 do ADCT não se aplica aos servidores contratados sem concurso público após a promulgação da Constituição Federal de 1988 (DIREITO ADMINISTRATIVO — Ed. 115: CONCURSO PÚBLICO - V (Tese 5)).\n\n(RE 1316010; RE 1476905; RE 1370210 ED; AR 3118 AgR; RE 1570584 ED; DIREITO ADMINISTRATIVO — Ed. 76: SERVIDOR PÚBLICO - II (Tese 8); DIREITO ADMINISTRATIVO — Ed. 115: CONCURSO PÚBLICO - V (Tese 5))",
+      "sources_retrieved": 9,
+      "judge_scores": {
+        "groundedness": 4.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0,
+        "justificativa": "A resposta está bem estruturada e apoiada nas passagens recuperadas, abordando diretamente a pergunta sobre a estabilidade do servidor público aprovado em concurso, com clareza e coerência.",
+        "judge_ok": true
+      },
+      "grounding_check": {
+        "citations_total": 15,
+        "citations_valid": 15,
+        "citations_hallucinated": 0,
+        "hallucinated_list": [],
+        "grounding_score": 1.0
+      }
+    }
+  ],
+  "aggregate": {
+    "judge_mean": {
+      "groundedness": 3.3,
+      "relevancia": 4.6,
+      "coerencia": 4.9,
+      "fluencia": 5.0
+    },
+    "grounding_mean": 0.975
+  }
+}

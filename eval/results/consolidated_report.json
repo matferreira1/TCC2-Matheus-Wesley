@@ -1,0 +1,60 @@
+{
+  "top_k": 5,
+  "modules": {
+    "retrieval": {
+      "fts5": {
+        "Recall@5": 0.5664285714285715,
+        "MRR": 0.76,
+        "nDCG@5": 0.7500232656010489,
+        "P@5": 0.6599999999999999
+      },
+      "like": {
+        "Recall@5": 0.15,
+        "MRR": 0.08333333333333333,
+        "nDCG@5": 0.10370590476405164,
+        "P@5": 0.08
+      }
+    },
+    "generation": {
+      "judge_mean": {
+        "groundedness": 3.9,
+        "relevancia": 4.8,
+        "coerencia": 4.9,
+        "fluencia": 5.0
+      },
+      "grounding_mean": 0.95
+    },
+    "latency": {
+      "p50_s": 16.094,
+      "p95_s": 17.676,
+      "p99_s": 18.052,
+      "mean_s": 16.106,
+      "min_s": 14.336,
+      "max_s": 18.146
+    },
+    "operational": {
+      "error_rate": 0.0,
+      "throughput_per_min": 3.73
+    },
+    "variants": {
+      "no_rag": {
+        "groundedness": 0.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0
+      },
+      "like": {
+        "groundedness": 0.0,
+        "relevancia": 0.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0
+      },
+      "fts5": {
+        "groundedness": 4.0,
+        "relevancia": 5.0,
+        "coerencia": 5.0,
+        "fluencia": 5.0
+      }
+    }
+  }
+}

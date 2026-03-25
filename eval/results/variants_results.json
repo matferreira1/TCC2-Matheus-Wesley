@@ -1,0 +1,553 @@
+{
+  "top_k": 5,
+  "n_questions": 5,
+  "results": [
+    {
+      "id": "q01",
+      "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+      "area": "Direito Penal",
+      "variants": {
+        "no_rag": {
+          "answer": "A prisão preventiva é uma medida cautelar prevista no Código de Processo Penal (CPP) brasileiro, que pode ser decretada em determinadas circunstâncias. Os fundamentos para a decretação da prisão preventiva estão previstos no artigo 312 do CPP e incluem:\n\n1. **Garantia da ordem pública**: Quando há necessidade de prevenir a continuidade da atividade criminosa ou para evitar que o investigado ou réu cause danos à sociedade.\n2. **Garantia da ordem econômica**: Em casos de crimes que afetam a economia ou a ordem econômica, como crimes contra a ordem tributária, crimes de lavagem de dinheiro, etc.\n3. **Conveniência da instrução criminal**: Para evitar que o investigado ou réu interfira na investigação ou no processo, por exemplo, destruindo provas ou ameaçando testemunhas.\n4. **Garantia da aplicação da lei penal**: Para assegurar que o investigado ou réu seja submetido ao processo e, eventualmente, cumpra a pena imposta.\n5. **Risco de fuga**: Quando há indícios de que o investigado ou réu possa fugir para evitar a responsabilização penal.\n\nAlém disso, o artigo 313 do CPP estabelece que a prisão preventiva só pode ser decretada quando há provas concretas da existência de um crime e indícios suficientes de autoria. A decisão que decreta a prisão preventiva deve ser fundamentada e baseada em elementos concretos do processo.\n\nÉ importante ressaltar que a prisão preventiva é uma medida excepcional e deve ser utilizada apenas quando estritamente necessário, devendo ser sempre avaliada pela autoridade judiciária com base nas circunstâncias específicas do caso.",
+          "sources_count": 0,
+          "retrieval_metrics": {},
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta é relevante, coerente e fluente, mas não está apoiada nas passagens recuperadas, pois não há contexto fornecido.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 1,
+            "citations_valid": 0,
+            "citations_hallucinated": 1,
+            "hallucinated_list": [
+              "CPP"
+            ],
+            "grounding_score": 0.0
+          }
+        },
+        "like": {
+          "answer": "Não encontrei informação suficiente.",
+          "sources_count": 5,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.0,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não apresenta conteúdo relevante às passagens recuperadas ou à pergunta sobre a decretação da prisão preventiva, mas é clara, coerente e gramaticalmente correta.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "fts5": {
+          "answer": "Os fundamentos para a decretação da prisão preventiva incluem:\n1. Garantia da ordem pública, que pode ser justificada pela gravidade concreta do delito, periculosidade do agente ou fundada probabilidade de reiteração delitiva (HC 264273 AgR; HC 264438 AgR; HC 264964 AgR; HC 265485 AgR).\n2. Reiteração delitiva, que pode ser demonstrada por inquéritos policiais e processos em andamento, mostrando a necessidade de interromper a atuação criminosa (HC 264273 AgR; HC 264438 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).\n3. Modus operandi do delito, que pode indicar a periculosidade do agente e justificar a prisão preventiva para garantir a ordem pública (HC 264273 AgR; HC 264964 AgR).\n4. Necessidade de impedir a reiteração delitiva, que justifica a manutenção da custódia cautelar, mesmo após a sentença (HC 264438 AgR; HC 264964 AgR).",
+          "sources_count": 7,
+          "retrieval_metrics": {
+            "Recall@5": 0.7142857142857143,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 1.0
+          },
+          "judge_scores": {
+            "groundedness": 4.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está bem apoiada nas passagens recuperadas, aborda diretamente a pergunta e é internamente consistente, mas poderia ser mais completa em relação a todos os fundamentos possíveis para a decretação da prisão preventiva.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 11,
+            "citations_valid": 11,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "hybrid": {
+          "answer": "Os fundamentos para a decretação da prisão preventiva incluem:\n1. Garantia da ordem pública, que pode ser justificada pela gravidade concreta do delito, periculosidade do agente, modus operandi e reiteração delitiva (HC 262726 AgR; HC 266082 AgR; HC 264273 AgR; HC 264438 AgR; HC 264964 AgR).\n2. Necessidade de impedir a reiteração delitiva, que pode ser considerada como fundamento idôneo para a manutenção da prisão preventiva (HC 264438 AgR; HC 264964 AgR).\n3. Existência de circunstâncias concretas que indiquem a periculosidade do agente e a gravidade do delito, como a participação em organização criminosa (HC 264964 AgR).\n4. Descumprimento de ordem judicial que impõe medida protetiva de urgência em favor de vítima de violência doméstica, que autoriza a decretação da prisão preventiva (DIREITO PENAL E PROCESSUAL PENAL — Ed. 206: MEDIDAS PROTETIVAS NA LEI MARIA DA PENHA II - LEI N. (Tese 9)).",
+          "sources_count": 9,
+          "retrieval_metrics": {
+            "Recall@5": 0.625,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 1.0
+          },
+          "judge_scores": {
+            "groundedness": 5.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta e é internamente consistente, clara e gramaticalmente correta.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 9,
+            "citations_valid": 9,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "q02",
+      "question": "O habeas corpus pode ser utilizado como substitutivo de recurso ordinário?",
+      "area": "Direito Penal",
+      "variants": {
+        "no_rag": {
+          "answer": "Não, o habeas corpus não pode ser utilizado como substitutivo de recurso ordinário. De acordo com a jurisprudência brasileira, o habeas corpus é uma ação constitucional que visa proteger a liberdade de locomoção e garantir que ninguém seja submetido a violência ou coação ilegal. Ele deve ser utilizado apenas em casos de ilegalidade ou abuso de poder que afetem a liberdade de uma pessoa, e não como meio de substituir recursos ordinários para discutir questões de mérito ou revisar decisões judiciais.\n\nA utilização do habeas corpus como substitutivo de recurso ordinário é considerada um desvio de finalidade e pode ser caracterizada como um \"habeas corpus de terceiro grau\", o que não é admitido pela jurisprudência brasileira. O Supremo Tribunal Federal (STF) e o Superior Tribunal de Justiça (STJ) têm reiteradamente decidido que o habeas corpus não pode ser utilizado como meio de reexaminar questões já decididas em recursos ordinários ou como forma de obter uma revisão de decisões judiciais.\n\nPortanto, é fundamental que as partes utilizem os recursos ordinários adequados para discutir questões de mérito ou revisar decisões judiciais, e não o habeas corpus, que deve ser reservado para situações em que haja uma ameaça real e iminente à liberdade de locomoção de uma pessoa.",
+          "sources_count": 0,
+          "retrieval_metrics": {},
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta é relevante, coerente e fluente, mas não está apoiada em passagens recuperadas, pois não há contexto fornecido. A resposta apresenta uma explicação clara e precisa sobre o uso do habeas corpus.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 2,
+            "citations_valid": 0,
+            "citations_hallucinated": 2,
+            "hallucinated_list": [
+              "STF",
+              "STJ"
+            ],
+            "grounding_score": 0.0
+          }
+        },
+        "like": {
+          "answer": "Não encontrei informação suficiente.",
+          "sources_count": 5,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.0,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas e não aborda a pergunta, mas é clara e coerente em sua limitação.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "fts5": {
+          "answer": "Não, o habeas corpus não pode ser utilizado como sucedâneo de revisão criminal ou como substitutivo de recurso ordinário (RHC 263988 AgR; RHC 264563 AgR; RHC 263834 AgR; RHC 263968 AgR; RHC 263769 AgR). Além disso, não se admite habeas corpus quando as questões apresentadas não tiverem sido examinadas pelo Tribunal apontado como coator, sob pena de supressão de instância (RHC 263968 AgR; RHC 263769 AgR).",
+          "sources_count": 7,
+          "retrieval_metrics": {
+            "Recall@5": 0.7142857142857143,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 1.0
+          },
+          "judge_scores": {
+            "groundedness": 5.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e correção gramatical.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 7,
+            "citations_valid": 7,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "hybrid": {
+          "answer": "O habeas corpus não pode ser utilizado como sucedâneo de revisão criminal ou como substitutivo de recurso ordinário, salvo em hipóteses excepcionais de manifesta ilegalidade (RHC 263988 AgR; RHC 264567 AgR; RHC 264563 AgR; RHC 264358 AgR; RHC 263834 AgR; RHC 266016 AgR; DIREITO PROCESSUAL PENAL — Ed. 36: HABEAS CORPUS (Tese 5)).",
+          "sources_count": 9,
+          "retrieval_metrics": {
+            "Recall@5": 0.8333333333333334,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 1.0
+          },
+          "judge_scores": {
+            "groundedness": 5.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e correção gramatical.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 7,
+            "citations_valid": 7,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "q04",
+      "question": "A ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal?",
+      "area": "Direito Penal",
+      "variants": {
+        "no_rag": {
+          "answer": "Sim, a ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal. De acordo com o artigo 93, IX, da Constituição Federal do Brasil, as decisões do Poder Judiciário devem ser motivadas, ou seja, devem apresentar os fundamentos e as razões pelas quais foram tomadas.\n\nNo caso específico da prisão preventiva, a fundamentação é ainda mais importante, pois envolve a restrição da liberdade individual. O artigo 312 do Código de Processo Penal (CPP) exige que a decisão que decreta a prisão preventiva seja fundamentada, indicando os motivos pelos quais a medida é necessária.\n\nA falta de fundamentação na decisão que decreta a prisão preventiva pode ser considerada um constrangimento ilegal, pois viola o direito do acusado à liberdade e ao devido processo legal. Nesse caso, o acusado pode impetrar um habeas corpus para questionar a legalidade da prisão e obter sua liberdade.\n\nPortanto, a ausência de fundamentação na decisão que decreta a prisão preventiva é considerada uma violação dos direitos fundamentais do acusado e configura constrangimento ilegal.",
+          "sources_count": 0,
+          "retrieval_metrics": {},
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta é relevante, coerente e fluente, mas não está apoiada nas passagens recuperadas, pois não há contexto fornecido.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 1,
+            "citations_valid": 0,
+            "citations_hallucinated": 1,
+            "hallucinated_list": [
+              "CPP"
+            ],
+            "grounding_score": 0.0
+          }
+        },
+        "like": {
+          "answer": "Não encontrei informação suficiente.",
+          "sources_count": 5,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.0,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas e não aborda a pergunta, mas é clara, coerente e gramaticalmente correta.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "fts5": {
+          "answer": "A ausência de fundamentação na decisão que decreta a prisão preventiva configura constrangimento ilegal, pois a decisão de prisão preventiva deve ser fundamentada em elementos concretos que evidenciem a necessidade da custódia para garantia da ordem pública, conveniência da instrução criminal ou aplicação da lei penal (HC 262726 AgR; HC 265624 AgR; HC 264406 AgR; HC 263925 AgR; HC 264568 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 8); Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 13)).",
+          "sources_count": 7,
+          "retrieval_metrics": {
+            "Recall@5": 0.8333333333333334,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 1.0
+          },
+          "judge_scores": {
+            "groundedness": 4.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está bem apoiada nas passagens recuperadas, aborda diretamente a pergunta e é coerente em sua estrutura lógica, apresentando fluência e clareza na redação.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 7,
+            "citations_valid": 7,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "hybrid": {
+          "answer": "A ausência de fundamentação na decisão que decreta a prisão preventiva pode configurar constrangimento ilegal, pois o decreto prisional deve ser considerado fundamentado quando demonstra elementos concretos que evidenciam a necessidade da custódia para garantia da ordem pública, conveniência da instrução criminal ou aplicação da lei penal (HC 262726 AgR; HC 264975 AgR; HC 265624 AgR).",
+          "sources_count": 9,
+          "retrieval_metrics": {
+            "Recall@5": 0.6666666666666666,
+            "MRR": 1.0,
+            "nDCG@5": 0.8772153153380493,
+            "P@5": 0.4
+          },
+          "judge_scores": {
+            "groundedness": 5.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, aborda adequadamente a pergunta, é internamente consistente e apresenta clareza e correção gramatical.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 3,
+            "citations_valid": 3,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "q06",
+      "question": "O plano de saúde pode limitar o tipo de tratamento médico para doenças cobertas?",
+      "area": "Direito Civil",
+      "variants": {
+        "no_rag": {
+          "answer": "De acordo com a Lei nº 9.656/98, que regulamenta os planos de saúde no Brasil, as operadoras de plano de saúde não podem limitar o tipo de tratamento médico para doenças cobertas, desde que esses tratamentos sejam considerados eficazes e estejam de acordo com as diretrizes da medicina baseada em evidências.\n\nNo entanto, é importante notar que as operadoras podem estabelecer alguns limites e restrições, como:\n\n* A necessidade de autorização prévia para determinados procedimentos;\n* A escolha de médicos e hospitais credenciados;\n* A limitação de dias de internação;\n* A cobertura de medicamentos e tratamentos específicos.\n\nAlém disso, a Agência Nacional de Saúde (ANS) estabelece diretrizes e normas para os planos de saúde, incluindo a cobertura mínima obrigatória para determinadas doenças e procedimentos.\n\nEm resumo, embora as operadoras de plano de saúde possam estabelecer alguns limites e restrições, elas não podem limitar o tipo de tratamento médico para doenças cobertas de forma arbitrária ou discriminatória, e devem respeitar as diretrizes da medicina baseada em evidências e as normas estabelecidas pela ANS.",
+          "sources_count": 0,
+          "retrieval_metrics": {},
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas, pois não há contexto fornecido, mas aborda adequadamente a pergunta, é coerente e bem redigida.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 1,
+            "citations_valid": 0,
+            "citations_hallucinated": 1,
+            "hallucinated_list": [
+              "ANS"
+            ],
+            "grounding_score": 0.0
+          }
+        },
+        "like": {
+          "answer": "Não encontrei informação suficiente.",
+          "sources_count": 5,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.0,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas e não aborda a pergunta, mas é coerente e clara em sua afirmação de não ter encontrado informação suficiente.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "fts5": {
+          "answer": "Não, o plano de saúde não pode limitar o tipo de tratamento médico para doenças cobertas. De acordo com as teses do STJ, o plano de saúde pode estabelecer as doenças que terão cobertura, mas não o tipo de tratamento utilizado para a cura de cada uma, sendo abusiva a cláusula contratual que exclui tratamento domiciliar (home care) ou outros procedimentos necessários para garantir a saúde ou a vida do segurado (DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3); DIREITO CIVIL — Ed. 2: PLANOS DE SAÚDE - I (Tese 5)).",
+          "sources_count": 7,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.16666666666666666,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 4.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está bem apoiada nas passagens recuperadas, aborda diretamente a pergunta e é coerente em sua estrutura lógica, com excelente legibilidade em português jurídico, mas poderia ser mais direta em relação às fontes específicas citadas.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 3,
+            "citations_valid": 2,
+            "citations_hallucinated": 1,
+            "hallucinated_list": [
+              "home care"
+            ],
+            "grounding_score": 0.6667
+          }
+        },
+        "hybrid": {
+          "answer": "Não, o plano de saúde não pode limitar o tipo de tratamento médico para doenças cobertas, pois é abusiva a cláusula contratual que exclui tratamento essencial para garantir a saúde ou a vida do segurado (DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3); DIREITO CIVIL — Ed. 2: PLANOS DE SAÚDE - I (Tese 5); DIREITO CIVIL — Ed. 271: PLANOS DE SAÚDE V (Tese 10)).",
+          "sources_count": 9,
+          "retrieval_metrics": {
+            "Recall@5": 0.25,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 0.2
+          },
+          "judge_scores": {
+            "groundedness": 4.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está bem apoiada nas passagens recuperadas, aborda diretamente a pergunta e é coerente em sua estrutura lógica, apresentando uma boa fluência na linguagem jurídica.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 3,
+            "citations_valid": 3,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "q09",
+      "question": "A demissão de servidor público efetivo sem processo administrativo disciplinar é válida?",
+      "area": "Direito Administrativo",
+      "variants": {
+        "no_rag": {
+          "answer": "Não, a demissão de servidor público efetivo sem processo administrativo disciplinar não é válida. De acordo com a Constituição Federal de 1988, artigo 41, §3º, e a Lei nº 8.112/90, que regula o regime jurídico dos servidores públicos civis da União, das autarquias e das fundações públicas federais, a demissão de servidor público efetivo só pode ocorrer após regular processo administrativo disciplinar, assegurada ampla defesa. Isso significa que o servidor tem direito a um processo justo e transparente, com oportunidade de apresentar defesa, antes de ser demitido. Portanto, a demissão sem o devido processo administrativo disciplinar é considerada ilegal e pode ser anulada pelo Poder Judiciário.",
+          "sources_count": 0,
+          "retrieval_metrics": {},
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas, pois não há contexto fornecido, mas é relevante, coerente e bem redigida, abordando diretamente a pergunta sobre a demissão de servidor público efetivo.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "like": {
+          "answer": "Não encontrei informação suficiente.",
+          "sources_count": 5,
+          "retrieval_metrics": {
+            "Recall@5": 0.0,
+            "MRR": 0.0,
+            "nDCG@5": 0.0,
+            "P@5": 0.0
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas e não aborda a pergunta, mas é clara e coerente em sua falta de informação.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "fts5": {
+          "answer": "Não encontrei informação suficiente nos documentos disponíveis.",
+          "sources_count": 7,
+          "retrieval_metrics": {
+            "Recall@5": 0.6666666666666666,
+            "MRR": 0.5,
+            "nDCG@5": 0.7606395682357036,
+            "P@5": 0.8
+          },
+          "judge_scores": {
+            "groundedness": 0.0,
+            "relevancia": 0.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta não está apoiada nas passagens recuperadas e não aborda a pergunta, mas é coerente e bem redigida.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 0,
+            "citations_valid": 0,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        },
+        "hybrid": {
+          "answer": "Não, a demissão de servidor público efetivo sem processo administrativo disciplinar não é válida (RE 1549760 AgR; RMS 40030 AgR; RMS 40547 AgR; RE 1581323 AgR; RMS 39323 ED-AgR; MS 38411 ED; DIREITO ADMINISTRATIVO — Ed. 1: PROCESSO ADMINISTRATIVO DISCIPLINAR - I (Tese 7); DIREITO ADMINISTRATIVO — Ed. 154: COMPILADO: PROCESSO ADMINISTRATIVO DISCIPLINAR (Tese 33); DIREITO ADMINISTRATIVO — Ed. 142: PROCESSO ADMINISTRATIVO DISCIPLINAR - V (Tese 7)).",
+          "sources_count": 9,
+          "retrieval_metrics": {
+            "Recall@5": 0.4,
+            "MRR": 1.0,
+            "nDCG@5": 1.0,
+            "P@5": 0.4
+          },
+          "judge_scores": {
+            "groundedness": 5.0,
+            "relevancia": 5.0,
+            "coerencia": 5.0,
+            "fluencia": 5.0,
+            "justificativa": "A resposta está estritamente apoiada nas passagens recuperadas, é relevante, coerente e apresenta fluência adequada, respondendo diretamente à pergunta sobre a demissão de servidor público efetivo sem processo administrativo disciplinar.",
+            "judge_ok": true
+          },
+          "grounding": {
+            "citations_total": 9,
+            "citations_valid": 9,
+            "citations_hallucinated": 0,
+            "hallucinated_list": [],
+            "grounding_score": 1.0
+          }
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "no_rag": {
+      "groundedness": 0.0,
+      "relevancia": 5.0,
+      "coerencia": 5.0,
+      "fluencia": 5.0
+    },
+    "like": {
+      "groundedness": 0.0,
+      "relevancia": 0.0,
+      "coerencia": 5.0,
+      "fluencia": 5.0
+    },
+    "fts5": {
+      "groundedness": 3.4,
+      "relevancia": 4.0,
+      "coerencia": 5.0,
+      "fluencia": 5.0
+    },
+    "hybrid": {
+      "groundedness": 4.8,
+      "relevancia": 5.0,
+      "coerencia": 5.0,
+      "fluencia": 5.0
+    }
+  }
+}
