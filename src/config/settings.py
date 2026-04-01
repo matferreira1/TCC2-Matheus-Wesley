@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     rag_max_ementa_chars: int = 1500  # limite por ementa na montagem do prompt
 
     # ------------------------------------------------------------------
+    # Reranking cross-encoder (estágio pós-RRF)
+    # ------------------------------------------------------------------
+    reranker_enabled: bool = True   # desabilitar para usar só RRF (mais rápido)
+
+    # ------------------------------------------------------------------
     # Validadores
     # ------------------------------------------------------------------
 

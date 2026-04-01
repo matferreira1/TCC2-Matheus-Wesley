@@ -1,0 +1,310 @@
+{
+  "questions": [
+    "q01",
+    "q02"
+  ],
+  "results": [
+    {
+      "id": "q01",
+      "question": "Quais são os fundamentos para a decretação da prisão preventiva?",
+      "area": "Direito Penal",
+      "no_rerank": {
+        "answer": "Os fundamentos para a decretação da prisão preventiva incluem:\n1. Garantia da ordem pública, que pode ser justificada pela gravidade concreta do delito, periculosidade do agente, modus operandi e reiteração delitiva (HC 262726 AgR; HC 266082 AgR; HC 264273 AgR; HC 264438 AgR; HC 264964 AgR).\n2. A existência de inquéritos policiais e processos em andamento, que podem demonstrar eventual reiteração delitiva (DIREITO PENAL E PROCESSUAL PENAL — Ed. 184: DO PACOTE ANTICRIME (Tese 8); Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).\n3. A necessidade de impedir a reiteração delitiva e a periculosidade do agente, que podem ser extraídas do modus operandi do delito ou da reiteração delituosa (HC 264273 AgR; HC 264438 AgR).\n4. A gravidade em concreto do crime e a periculosidade do agente, que constituem fundamentação idônea para a decretação da custódia preventiva (HC 264964 AgR).\n5. A necessidade de interromper a atuação de organização criminosa, que é fundamento idôneo para a decretação da prisão preventiva (HC 264964 AgR).",
+        "sources": [
+          {
+            "id": 3093,
+            "processo": "HC 262726 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3297,
+            "processo": "HC 266082 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2405,
+            "processo": "HC 264273 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2465,
+            "processo": "HC 264438 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 1619,
+            "processo": "HC 264964 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2661,
+            "processo": "HC 264783 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 6136,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3845,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 5909,
+            "processo": null,
+            "tipo": "tese"
+          }
+        ],
+        "latency": {
+          "retrieval_s": 0.338,
+          "rerank_s": 0.0,
+          "llm_s": 2.109,
+          "total_s": 2.447
+        },
+        "ir_metrics": {
+          "Recall@6": 0.6666666666666666,
+          "MRR": 1.0,
+          "nDCG@6": 1.0,
+          "P@6": 1.0
+        },
+        "relevant_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "with_rerank": {
+        "answer": "Os fundamentos para a decretação da prisão preventiva incluem:\n1. Garantia da ordem pública, que pode ser justificada pela periculosidade do agente, modus operandi do delito, reiteração delitiva e gravidade concreta do delito (HC 264273 AgR; HC 266082 AgR; HC 262726 AgR; HC 265485 AgR; HC 264975 AgR; RHC 265716 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).\n2. Necessidade de resguardar a ordem pública, especialmente quando há fundado risco de reiteração delitiva, como no caso de inquéritos policiais e processos em andamento (HC 266082 AgR; RHC 265716 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).\n3. Gravidade concreta do delito e periculosidade do agente, que podem justificar a decretação da prisão preventiva para garantir a ordem pública e a aplicação da lei penal (HC 262726 AgR; HC 265485 AgR; HC 264975 AgR).\n4. Existência de inquéritos ou ações penais em curso, que podem demonstrar reiteração delitiva e justificar a decretação da prisão preventiva (RHC 265716 AgR; Direito Processual Penal — Ed. 32: PRISÃO PREVENTIVA (Tese 14)).",
+        "sources": [
+          {
+            "id": 2405,
+            "processo": "HC 264273 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3297,
+            "processo": "HC 266082 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3093,
+            "processo": "HC 262726 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2060,
+            "processo": "HC 265485 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2402,
+            "processo": "HC 264975 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 1495,
+            "processo": "RHC 265716 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3845,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3837,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3967,
+            "processo": null,
+            "tipo": "tese"
+          }
+        ],
+        "latency": {
+          "retrieval_s": 0.213,
+          "rerank_s": 5.628,
+          "llm_s": 1.872,
+          "total_s": 7.713
+        },
+        "ir_metrics": {
+          "Recall@6": 0.625,
+          "MRR": 1.0,
+          "nDCG@6": 0.9896062251871524,
+          "P@6": 0.8333333333333334
+        },
+        "relevant_flags": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "id": "q02",
+      "question": "O habeas corpus pode ser utilizado como substitutivo de recurso ordinário?",
+      "area": "Direito Penal",
+      "no_rerank": {
+        "answer": "Não, o habeas corpus não pode ser utilizado como sucedâneo de revisão criminal ou como substitutivo de recurso ordinário, salvo em hipóteses excepcionais de manifesta ilegalidade (RHC 263988 AgR; RHC 264567 AgR; RHC 264563 AgR; RHC 264358 AgR; RHC 263834 AgR; RHC 266016 AgR; DIREITO PROCESSUAL PENAL — Ed. 36: HABEAS CORPUS (Tese 5)).",
+        "sources": [
+          {
+            "id": 2456,
+            "processo": "RHC 263988 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2380,
+            "processo": "RHC 264567 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2449,
+            "processo": "RHC 264563 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2919,
+            "processo": "RHC 264358 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2266,
+            "processo": "RHC 263834 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3261,
+            "processo": "RHC 266016 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3893,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3898,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3905,
+            "processo": null,
+            "tipo": "tese"
+          }
+        ],
+        "latency": {
+          "retrieval_s": 0.252,
+          "rerank_s": 0.0,
+          "llm_s": 0.86,
+          "total_s": 1.111
+        },
+        "ir_metrics": {
+          "Recall@6": 1.0,
+          "MRR": 1.0,
+          "nDCG@6": 1.0,
+          "P@6": 1.0
+        },
+        "relevant_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ]
+      },
+      "with_rerank": {
+        "answer": "Não, o habeas corpus não pode ser utilizado como sucedâneo de recurso ordinário, salvo em hipóteses excepcionais de manifesta ilegalidade (RHC 265094 AgR; RHC 264567 AgR; RHC 265680 AgR; RHC 264358 AgR; RHC 266016 AgR; HC 266582 AgR; DIREITO PROCESSUAL PENAL — Ed. 63: REVISÃO CRIMINAL (Tese 3); DIREITO EMPRESARIAL — Ed. 35: RECUPERAÇÃO JUDICIAL - I (Tese 1)).",
+        "sources": [
+          {
+            "id": 2294,
+            "processo": "RHC 265094 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2380,
+            "processo": "RHC 264567 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 1341,
+            "processo": "RHC 265680 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 2919,
+            "processo": "RHC 264358 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 3261,
+            "processo": "RHC 266016 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 1237,
+            "processo": "HC 266582 AgR",
+            "tipo": "acordao"
+          },
+          {
+            "id": 4350,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 3889,
+            "processo": null,
+            "tipo": "tese"
+          },
+          {
+            "id": 4415,
+            "processo": null,
+            "tipo": "tese"
+          }
+        ],
+        "latency": {
+          "retrieval_s": 0.216,
+          "rerank_s": 5.513,
+          "llm_s": 1.111,
+          "total_s": 6.841
+        },
+        "ir_metrics": {
+          "Recall@6": 0.75,
+          "MRR": 1.0,
+          "nDCG@6": 1.0,
+          "P@6": 1.0
+        },
+        "relevant_flags": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ]
+      }
+    }
+  ]
+}

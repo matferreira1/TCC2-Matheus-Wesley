@@ -201,6 +201,16 @@ _SAMPLE_TESES = [
         "a necessidade da medida cautelar, nos termos do art. 312 do CPP.",
         "HC 567890/RJ",
     ),
+    # Súmula STJ — exercita o branch especial em _build_prompt()
+    (
+        "SÚMULAS STJ",
+        528,
+        "ENUNCIADOS DAS SÚMULAS",
+        1,
+        "Compete ao juiz federal do local da apreensão da droga remetida do "
+        "exterior pela via postal processar e julgar o crime de tráfico internacional.",
+        "",
+    ),
 ]
 
 

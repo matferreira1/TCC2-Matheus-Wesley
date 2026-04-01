@@ -75,6 +75,7 @@ async def test_answer_returns_rag_response(db: aiosqlite.Connection) -> None:
         mock_settings.rag_top_k_teses = 3
         mock_settings.rag_max_ementa_chars = 1500
         mock_settings.llm_provider = "groq"
+        mock_settings.reranker_enabled = False
 
         result = await answer(db, "Quais os fundamentos para negar habeas corpus?")
 
@@ -101,6 +102,7 @@ async def test_answer_populates_sources(db: aiosqlite.Connection) -> None:
         mock_settings.rag_top_k_teses = 3
         mock_settings.rag_max_ementa_chars = 1500
         mock_settings.llm_provider = "groq"
+        mock_settings.reranker_enabled = False
 
         result = await answer(db, "Quais os fundamentos para negar habeas corpus?")
 
@@ -123,6 +125,7 @@ async def test_answer_sources_empty_when_no_match(db: aiosqlite.Connection) -> N
         mock_settings.rag_top_k_teses = 3
         mock_settings.rag_max_ementa_chars = 1500
         mock_settings.llm_provider = "groq"
+        mock_settings.reranker_enabled = False
 
         result = await answer(db, "Pergunta sem resultados na base de dados?")
 
@@ -145,6 +148,7 @@ async def test_answer_propagates_llm_error(db: aiosqlite.Connection) -> None:
         mock_settings.rag_top_k_teses = 3
         mock_settings.rag_max_ementa_chars = 1500
         mock_settings.llm_provider = "groq"
+        mock_settings.reranker_enabled = False
 
         with pytest.raises(RuntimeError, match="LLM error"):
             await answer(db, "Pergunta qualquer com erro no LLM?")
@@ -165,6 +169,7 @@ async def test_answer_uses_ollama_when_configured(db: aiosqlite.Connection) -> N
         mock_settings.rag_top_k_teses = 3
         mock_settings.rag_max_ementa_chars = 1500
         mock_settings.llm_provider = "ollama"
+        mock_settings.reranker_enabled = False
 
         result = await answer(db, "Pergunta para Ollama?")
 
@@ -198,6 +203,55 @@ def test_build_prompt_contains_tese_label() -> None:
     teses = [_make_tese(id=1, edicao_num=143, tese_num=1)]
     prompt = _build_prompt("Pergunta?", [], teses)
     assert "[Tese STJ 1]" in prompt
+
+
+def test_build_prompt_sumula_usa_label_sumula() -> None:
+    """Tese com area=SÚMULAS STJ deve gerar [Súmula STJ N], não [Tese STJ N]."""
+    sumula = TesesResult(
+        id=1,
+        area="SÚMULAS STJ",
+        edicao_num=528,
+        edicao_titulo="ENUNCIADOS DAS SÚMULAS",
+        tese_num=1,
+        tese_texto="Compete ao juiz federal do local da apreensão da droga.",
+        julgados="",
+        rank=-1.0,
+    )
+    prompt = _build_prompt("Pergunta?", [], [sumula])
+    assert "[Súmula STJ 528]" in prompt
+
+
+def test_build_prompt_sumula_nao_usa_label_tese() -> None:
+    """Súmula STJ não deve gerar o label [Tese STJ N] no prompt."""
+    sumula = TesesResult(
+        id=1,
+        area="SÚMULAS STJ",
+        edicao_num=528,
+        edicao_titulo="ENUNCIADOS DAS SÚMULAS",
+        tese_num=1,
+        tese_texto="Compete ao juiz federal do local da apreensão da droga.",
+        julgados="",
+        rank=-1.0,
+    )
+    prompt = _build_prompt("Pergunta?", [], [sumula])
+    assert "[Tese STJ 1]" not in prompt
+
+
+def test_build_prompt_sumula_contem_texto() -> None:
+    """O texto da súmula deve aparecer no prompt."""
+    texto = "Compete ao juiz federal do local da apreensão da droga."
+    sumula = TesesResult(
+        id=1,
+        area="SÚMULAS STJ",
+        edicao_num=528,
+        edicao_titulo="ENUNCIADOS DAS SÚMULAS",
+        tese_num=1,
+        tese_texto=texto,
+        julgados="",
+        rank=-1.0,
+    )
+    prompt = _build_prompt("Pergunta?", [], [sumula])
+    assert texto in prompt
 
 
 def test_build_prompt_empty_sources_uses_fallback() -> None:

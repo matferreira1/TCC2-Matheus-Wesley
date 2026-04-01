@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import aiosqlite
 
 from src.config.settings import settings
-from src.services import ollama_service, groq_service, search_service, semantic_service
+from src.services import ollama_service, groq_service, search_service, semantic_service, rerank_service
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,8 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
     inicio = time.perf_counter()
 
     # Busca paralela: FTS5 (lexical) + semântica em acórdãos e teses
-    _FETCH = 15  # candidatos de cada fonte antes do RRF
+    _FETCH = 15           # candidatos de cada fonte antes do RRF
+    _RRF_CANDIDATES = 20  # candidatos pós-RRF enviados ao cross-encoder
     (
         fts5_acordaos,
         fts5_teses,
@@ -55,14 +56,28 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
         semantic_service.search_teses_semantic(conn, question, top_k=_FETCH),
     )
 
-    # RRF: funde lexical + semântico e seleciona os melhores para o prompt
-    sources = semantic_service.rrf_acordaos(fts5_acordaos, sem_acordaos, top_n=settings.rag_top_k)
-    sources_teses = semantic_service.rrf_teses(fts5_teses, sem_teses, top_n=settings.rag_top_k_teses)
+    # RRF: funde lexical + semântico → pool de candidatos para o reranker
+    candidates_acordaos = semantic_service.rrf_acordaos(
+        fts5_acordaos, sem_acordaos, top_n=_RRF_CANDIDATES
+    )
+    candidates_teses = semantic_service.rrf_teses(
+        fts5_teses, sem_teses, top_n=_RRF_CANDIDATES
+    )
+
+    # Cross-encoder reranking: pontua cada par (query, doc) e seleciona top_k
+    if settings.reranker_enabled:
+        sources = rerank_service.rerank(question, candidates_acordaos, top_n=settings.rag_top_k)
+        sources_teses = rerank_service.rerank(question, candidates_teses, top_n=settings.rag_top_k_teses)
+    else:
+        sources = candidates_acordaos[:settings.rag_top_k]
+        sources_teses = candidates_teses[:settings.rag_top_k_teses]
 
     logger.info(
-        "Retrieval híbrido: %d acórdãos + %d teses (FTS5) | %d + %d (semântico) → RRF → %d + %d",
+        "Retrieval híbrido: %d acórdãos + %d teses (FTS5) | %d + %d (semântico)"
+        " → RRF %d + %d → rerank → %d + %d",
         len(fts5_acordaos), len(fts5_teses),
         len(sem_acordaos), len(sem_teses),
+        len(candidates_acordaos), len(candidates_teses),
         len(sources), len(sources_teses),
     )
 

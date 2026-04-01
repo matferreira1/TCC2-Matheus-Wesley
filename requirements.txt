@@ -30,6 +30,10 @@ pandas==2.2.2
 # Rate limiting
 slowapi==0.1.9
 
+# Busca semântica + reranking cross-encoder
+sentence-transformers>=2.7.0
+numpy>=1.26.0
+
 # Testes
 pytest==8.2.0
 pytest-asyncio==0.23.6
