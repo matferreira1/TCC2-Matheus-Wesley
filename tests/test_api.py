@@ -266,3 +266,34 @@ async def test_post_query_internal_error_returns_500(api_client: AsyncClient) ->
         )
 
     assert resp.status_code == 500
+
+
+# ===========================================================================
+# Testes - health check
+# ===========================================================================
+
+
+async def test_health_returns_200(api_client: AsyncClient) -> None:
+    """GET /health deve retornar 200 OK."""
+    resp = await api_client.get("/api/v1/health")
+    assert resp.status_code == 200
+
+
+async def test_health_response_structure(api_client: AsyncClient) -> None:
+    """Resposta do health deve conter os campos esperados."""
+    resp = await api_client.get("/api/v1/health")
+    body = resp.json()
+    for field in ("status", "uptime_seconds", "database", "llm_provider", "reranker_enabled"):
+        assert field in body
+
+
+async def test_health_database_ok(api_client: AsyncClient) -> None:
+    """Com banco em memoria operacional, database deve ser 'ok'."""
+    resp = await api_client.get("/api/v1/health")
+    assert resp.json()["database"] == "ok"
+
+
+async def test_health_status_ok_when_db_ok(api_client: AsyncClient) -> None:
+    """Com banco operacional, status geral deve ser 'ok'."""
+    resp = await api_client.get("/api/v1/health")
+    assert resp.json()["status"] == "ok"

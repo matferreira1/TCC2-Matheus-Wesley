@@ -21,6 +21,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.limiter import limiter
+from src.api.routes import health as health_router
 from src.api.routes import query as query_router
 from src.config.logging_config import setup_logging
 from src.config.settings import get_settings
@@ -158,6 +159,7 @@ app.add_middleware(_SecurityHeadersMiddleware)
 # Registro de routers
 # ---------------------------------------------------------------------------
 
+app.include_router(health_router.router, prefix="/api/v1", tags=["Health"])
 app.include_router(query_router.router, prefix="/api/v1", tags=["Consulta RAG"])
 
 # ---------------------------------------------------------------------------
