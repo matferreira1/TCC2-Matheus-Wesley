@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IAJuris</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg:      '#111318',
+            surface: '#1A1D27',
+            border:  '#2A2E3F',
+            text:    '#E2E2E8',
+            muted:   '#6B7080',
+            accent:  '#4F7CAC',
+          },
+          fontFamily: {
+            serif: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans:  ['"DM Sans"', 'system-ui', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body { font-family: 'DM Sans', system-ui, sans-serif; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+    textarea:focus { outline: none; }
+
+    @keyframes dot-pulse {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40%            { opacity: 1;   transform: scale(1);   }
+    }
+    .dot:nth-child(1) { animation: dot-pulse 1.4s ease-in-out infinite 0s;    }
+    .dot:nth-child(2) { animation: dot-pulse 1.4s ease-in-out infinite 0.2s;  }
+    .dot:nth-child(3) { animation: dot-pulse 1.4s ease-in-out infinite 0.4s;  }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+      to   { opacity: 1; transform: translate(-50%, -50%) scale(1);    }
+    }
+    #modal { animation: modalIn 0.2s ease forwards; }
+
+    ::selection { background: rgba(79, 124, 172, 0.3); }
+    ::-webkit-scrollbar            { width: 4px; }
+    ::-webkit-scrollbar-track      { background: #111318; }
+    ::-webkit-scrollbar-thumb      { background: #2A2E3F; border-radius: 2px; }
+  </style>
+</head>
+
+<body class="min-h-screen bg-bg text-text flex flex-col">
+
+  <div class="flex-1 flex flex-col max-w-2xl mx-auto w-full px-5 py-12">
+
+    <!-- Header -->
+    <header class="mb-10">
+      <!-- Logo: serif + small scales icon inline -->
+      <div class="flex items-center gap-3 mb-1">
+        <svg width="22" height="22" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+          <line x1="22" y1="5"  x2="22" y2="39" stroke="#4F7CAC" stroke-width="2"   stroke-linecap="round"/>
+          <line x1="8"  y1="12" x2="36" y2="12" stroke="#4F7CAC" stroke-width="2"   stroke-linecap="round"/>
+          <line x1="8"  y1="12" x2="3"  y2="23" stroke="#4F7CAC" stroke-width="1.4" stroke-linecap="round"/>
+          <line x1="8"  y1="12" x2="13" y2="23" stroke="#4F7CAC" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M2.5 23 Q8 30 13.5 23"        stroke="#4F7CAC" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+          <line x1="36" y1="12" x2="31" y2="23" stroke="#4F7CAC" stroke-width="1.4" stroke-linecap="round"/>
+          <line x1="36" y1="12" x2="41" y2="23" stroke="#4F7CAC" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M30.5 23 Q36 30 41.5 23"      stroke="#4F7CAC" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+          <line x1="15" y1="39" x2="29" y2="39" stroke="#4F7CAC" stroke-width="2"   stroke-linecap="round"/>
+        </svg>
+        <h1 class="font-serif text-2xl font-medium text-text tracking-wide">IAJuris</h1>
+      </div>
+      <p class="text-muted text-sm font-light ml-[34px]">
+        Consulta jurisprudencial — STF e STJ
+      </p>
+    </header>
+
+    <!-- Query form -->
+    <form id="form" onsubmit="handleSubmit(event)" novalidate>
+      <div class="relative mb-3">
+        <textarea
+          id="input"
+          class="w-full bg-surface border border-border text-text text-sm leading-relaxed rounded-lg px-4 py-3 resize-none placeholder:text-muted min-h-[100px] focus:border-accent transition-colors duration-200"
+          placeholder="Qual o entendimento do STF sobre sigilo bancário?"
+          maxlength="1000"
+          minlength="10"
+          required
+        ></textarea>
+        <span id="count" class="absolute bottom-3 right-3 text-xs text-muted/50 pointer-events-none">0/1000</span>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-muted/60 font-light">Ctrl + Enter para enviar</span>
+        <button
+          type="submit"
+          id="btn"
+          class="bg-accent hover:bg-accent/85 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2 rounded-md transition-colors duration-150"
+        >
+          Consultar
+        </button>
+      </div>
+    </form>
+
+    <!-- Loading modal (overlay) -->
+    <div id="loader-backdrop" class="hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"></div>
+    <div id="loader" class="hidden fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50
+                             bg-surface border border-border rounded-xl px-10 py-8
+                             flex-col items-center gap-4 shadow-2xl min-w-[260px]"
+         role="dialog" aria-modal="true" aria-label="Carregando resposta">
+      <div class="flex gap-2">
+        <div class="dot w-2 h-2 rounded-full bg-accent"></div>
+        <div class="dot w-2 h-2 rounded-full bg-accent"></div>
+        <div class="dot w-2 h-2 rounded-full bg-accent"></div>
+      </div>
+      <p class="text-sm text-muted font-light text-center">Consultando a jurisprudência…</p>
+    </div>
+
+    <!-- Error -->
+    <div id="error" class="hidden mt-6 bg-red-950/30 border border-red-900/40 rounded-lg px-4 py-3" role="alert">
+      <p id="error-msg" class="text-red-400 text-sm"></p>
+    </div>
+
+    <!-- Result -->
+    <section id="result" class="hidden mt-10 fade-in" aria-live="polite">
+
+      <!-- Answer -->
+      <p id="answer" class="text-text/90 text-sm leading-[1.85] whitespace-pre-wrap mb-8"></p>
+
+      <!-- Sources -->
+      <div id="sources-wrap" class="hidden">
+        <p class="text-xs font-medium text-muted uppercase tracking-widest mb-3">Fontes consultadas</p>
+        <div id="sources" class="space-y-2"></div>
+      </div>
+
+      <button onclick="reset()" class="mt-8 text-xs text-muted hover:text-text transition-colors duration-150 font-light">
+        + Nova consulta
+      </button>
+
+    </section>
+
+  </div>
+
+  <!-- Footer -->
+  <footer class="py-5 text-center">
+    <p class="text-xs text-muted/40">IAJuris · UnB FGA · Engenharia de Software · 2025</p>
+  </footer>
+
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const inp = $('input');
+
+    inp.addEventListener('input', () => {
+      $('count').textContent = inp.value.length + '/1000';
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 280) + 'px';
+    });
+
+    inp.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') $('form').requestSubmit();
+    });
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const q = inp.value.trim();
+      if (q.length < 10) { inp.focus(); return; }
+
+      loading(true);
+      hide('result'); hide('error');
+
+      try {
+        const res = await fetch('/api/v1/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q }),
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          throw new Error(b.detail || `Erro ${res.status}`);
+        }
+        showResult(await res.json());
+      } catch (err) {
+        $('error-msg').textContent = err.message || 'Erro inesperado. Tente novamente.';
+        show('error');
+      } finally {
+        loading(false);
+      }
+    }
+
+    function showResult(data) {
+      $('answer').textContent = data.answer || '—';
+
+      const src = $('sources');
+      src.innerHTML = '';
+      if (data.sources?.length) {
+        data.sources.forEach(s => src.appendChild(buildCard(s)));
+        show('sources-wrap');
+      } else {
+        hide('sources-wrap');
+      }
+
+      // re-trigger animation
+      const el = $('result');
+      el.classList.remove('fade-in');
+      el.offsetHeight;
+      el.classList.add('fade-in');
+      show('result');
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    }
+
+    function buildCard(s) {
+      const isTese = s.tipo === 'tese_stj';
+      const excerpt = s.ementa ? s.ementa.slice(0, 260) + (s.ementa.length > 260 ? '…' : '') : '';
+      const div = document.createElement('div');
+      div.className = 'bg-surface border border-border rounded-lg px-4 py-3';
+      div.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <span class="text-[0.7rem] font-medium text-accent uppercase tracking-wider">
+            ${esc(s.tribunal)}${isTese ? ' · Em Teses' : ''}
+          </span>
+          <span class="text-[0.68rem] text-muted truncate max-w-[55%] text-right">${esc(s.numero_processo)}</span>
+        </div>
+        <p class="text-xs text-muted leading-relaxed">${esc(excerpt)}</p>
+      `;
+      return div;
+    }
+
+    function reset() {
+      hide('result'); hide('error');
+      inp.value = ''; $('count').textContent = '0/1000'; inp.style.height = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      inp.focus();
+    }
+
+    function loading(on) {
+      const l = $('loader'), bd = $('loader-backdrop'), btn = $('btn');
+      if (on) {
+        bd.classList.remove('hidden');
+        l.classList.remove('hidden'); l.classList.add('flex');
+        btn.disabled = true; btn.textContent = 'Aguarde…';
+      } else {
+        bd.classList.add('hidden');
+        l.classList.add('hidden');   l.classList.remove('flex');
+        btn.disabled = false; btn.textContent = 'Consultar';
+      }
+    }
+
+    function show(id) { $(id).classList.remove('hidden'); }
+    function hide(id) { $(id).classList.add('hidden'); }
+
+    function esc(s) {
+      return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+
+</body>
+</html>

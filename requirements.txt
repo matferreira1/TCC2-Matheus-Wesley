@@ -6,6 +6,7 @@
 # API Framework
 fastapi==0.111.0
 uvicorn[standard]==0.41.0
+aiofiles>=23.1.0            # StaticFiles (FastAPI)
 
 # Validação de dados / Settings
 pydantic==2.7.1

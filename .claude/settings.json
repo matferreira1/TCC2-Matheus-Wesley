@@ -7,7 +7,9 @@
       "Bash(source .venv/bin/activate)",
       "Bash(python -c \"from eval.compare_variants import run; print\\(''OK''\\)\")",
       "Bash(python -m eval.run_evaluation variants --questions q01,q02,q04,q06,q09)",
-      "Bash(ls -lh /home/mat/trabalhos/tcc/*.pdf)"
+      "Bash(ls -lh /home/mat/trabalhos/tcc/*.pdf)",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import main; print\\('main.py OK'\\)\")"
     ]
   }
 }
