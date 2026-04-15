@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 import aiosqlite
 
+from src.services.query_expansion import expand_query
+
 _DB_QUERY_TIMEOUT = 5.0  # segundos
 
 logger = logging.getLogger(__name__)
@@ -67,6 +69,10 @@ async def search(
     ]
     if not tokens:
         return []
+    expanded = expand_query(tokens)
+    if expanded:
+        logger.debug("Query expansion acórdãos: +%d termos: %s", len(expanded), expanded)
+        tokens = tokens + expanded
     safe_query = " OR ".join(tokens)  # OR para maximizar recall em buscas por linguagem natural
     logger.info("FTS5 query: '%s' | top_k=%d", safe_query, top_k)
 
@@ -138,7 +144,10 @@ async def search_teses(
     ]
     if not tokens:
         return []
-
+    expanded = expand_query(tokens)
+    if expanded:
+        logger.debug("Query expansion teses: +%d termos: %s", len(expanded), expanded)
+        tokens = tokens + expanded
     safe_query = " OR ".join(tokens)
     logger.info("FTS5 teses query: '%s' | top_k=%d", safe_query, top_k)
 
