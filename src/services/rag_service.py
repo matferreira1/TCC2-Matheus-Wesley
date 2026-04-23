@@ -33,6 +33,7 @@ class RagResponse:
     answer: str
     sources: list[search_service.SearchResult] = field(default_factory=list)
     sources_teses: list[search_service.TesesResult] = field(default_factory=list)
+    sources_sv: list[search_service.SumulaVinculanteResult] = field(default_factory=list)
 
 
 async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
@@ -41,19 +42,24 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
     logger.info("Pergunta: %s", question)
     inicio = time.perf_counter()
 
-    # Busca paralela: FTS5 (lexical) + semântica em acórdãos e teses
+    # Busca paralela: FTS5 (lexical) + semântica em acórdãos, teses e SVs
     _FETCH = 15           # candidatos de cada fonte antes do RRF
     _RRF_CANDIDATES = 20  # candidatos pós-RRF enviados ao cross-encoder
+    _FETCH_SV = 8         # SVs candidatas antes do RRF (corpus pequeno: ~60 docs)
     (
         fts5_acordaos,
         fts5_teses,
+        fts5_sv,
         sem_acordaos,
         sem_teses,
+        sem_sv,
     ) = await asyncio.gather(
         search_service.search(conn, question, top_k=_FETCH),
         search_service.search_teses(conn, question, top_k=_FETCH),
+        search_service.search_sumulas_vinculantes(conn, question, top_k=_FETCH_SV),
         semantic_service.search_semantic(conn, question, top_k=_FETCH),
         semantic_service.search_teses_semantic(conn, question, top_k=_FETCH),
+        semantic_service.search_sv_semantic(conn, question, top_k=_FETCH_SV),
     )
 
     # RRF: funde lexical + semântico → pool de candidatos para o reranker
@@ -63,22 +69,28 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
     candidates_teses = semantic_service.rrf_teses(
         fts5_teses, sem_teses, top_n=_RRF_CANDIDATES
     )
+    candidates_sv = semantic_service.rrf_sv(
+        fts5_sv, sem_sv, top_n=3
+    )
 
     # Cross-encoder reranking: pontua cada par (query, doc) e seleciona top_k
     if settings.reranker_enabled:
         sources = rerank_service.rerank(question, candidates_acordaos, top_n=settings.rag_top_k)
         sources_teses = rerank_service.rerank(question, candidates_teses, top_n=settings.rag_top_k_teses)
+        sources_sv = rerank_service.rerank(question, candidates_sv, top_n=2)
     else:
         sources = candidates_acordaos[:settings.rag_top_k]
         sources_teses = candidates_teses[:settings.rag_top_k_teses]
+        sources_sv = candidates_sv[:2]
 
     logger.info(
-        "Retrieval híbrido: %d acórdãos + %d teses (FTS5) | %d + %d (semântico)"
-        " → RRF %d + %d → rerank → %d + %d",
-        len(fts5_acordaos), len(fts5_teses),
-        len(sem_acordaos), len(sem_teses),
-        len(candidates_acordaos), len(candidates_teses),
-        len(sources), len(sources_teses),
+        "Retrieval híbrido: %d acórdãos + %d teses + %d SVs (FTS5)"
+        " | %d + %d + %d (semântico)"
+        " → RRF %d + %d + %d → rerank → %d + %d + %d",
+        len(fts5_acordaos), len(fts5_teses), len(fts5_sv),
+        len(sem_acordaos), len(sem_teses), len(sem_sv),
+        len(candidates_acordaos), len(candidates_teses), len(candidates_sv),
+        len(sources), len(sources_teses), len(sources_sv),
     )
 
     if settings.llm_provider not in _VALID_LLM_PROVIDERS:
@@ -87,7 +99,7 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
             f"Valores aceitos: {', '.join(sorted(_VALID_LLM_PROVIDERS))}"
         )
 
-    prompt = _build_prompt(question, sources, sources_teses)
+    prompt = _build_prompt(question, sources, sources_teses, sources_sv)
     logger.debug("Prompt enviado à LLM:\n%s\n%s\n%s", "─" * 60, prompt, "─" * 60)
 
     if len(prompt) > _MAX_PROMPT_CHARS:
@@ -103,9 +115,50 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
         logger.info("Provedor LLM: Ollama (%s)", settings.ollama_model)
         text = await ollama_service.generate(prompt)
 
+    # Descarta fontes cujo conteúdo não se reflete na resposta gerada
+    if settings.reranker_enabled:
+        sources, sources_teses, sources_sv = _filter_cited_sources(
+            text, sources, sources_teses, sources_sv
+        )
+
     elapsed = time.perf_counter() - inicio
     logger.info("Pipeline concluído em %.1fs", elapsed)
-    return RagResponse(answer=text, sources=sources, sources_teses=sources_teses)
+    return RagResponse(answer=text, sources=sources, sources_teses=sources_teses, sources_sv=sources_sv)
+
+
+def _filter_cited_sources(
+    answer: str,
+    sources: list[search_service.SearchResult],
+    sources_teses: list[search_service.TesesResult],
+    sources_sv: list[search_service.SumulaVinculanteResult],
+) -> tuple[
+    list[search_service.SearchResult],
+    list[search_service.TesesResult],
+    list[search_service.SumulaVinculanteResult],
+]:
+    """
+    Descarta fontes cujo conteúdo não se reflete na resposta gerada pelo LLM.
+
+    Aplica o cross-encoder sobre pares (resposta, fonte) e retém apenas os
+    documentos com score >= threshold. A ordem original (RRF + reranking) é
+    preservada — sem nova ordenação.
+
+    Fallback: se nenhuma fonte passar o threshold (ex.: resposta genérica ou
+    "não encontrei informação"), retorna as listas originais para evitar que a
+    UI mostre zero fontes.
+    """
+    filtered_s = rerank_service.filter_by_answer(answer, sources)
+    filtered_t = rerank_service.filter_by_answer(answer, sources_teses)
+    filtered_sv = rerank_service.filter_by_answer(answer, sources_sv)
+
+    if not filtered_s and not filtered_t and not filtered_sv:
+        logger.info(
+            "_filter_cited_sources: nenhuma fonte passou o threshold — "
+            "retornando listas originais (fallback)."
+        )
+        return sources, sources_teses, sources_sv
+
+    return filtered_s, filtered_t, filtered_sv
 
 
 def _extract_ementa_payload(ementa: str, max_chars: int = 1500) -> str:
@@ -183,18 +236,30 @@ def _build_prompt(
     question: str,
     sources: list[search_service.SearchResult],
     sources_teses: list[search_service.TesesResult],
+    sources_sv: list[search_service.SumulaVinculanteResult] | None = None,
 ) -> str:
-    """Monta o prompt RAG v6 com contexto jurídico e pergunta do usuário.
+    """Monta o prompt RAG v7 com contexto jurídico e pergunta do usuário.
 
-    v6 — adiciona:
-    - Linha "Efeito:" em cada bloco de documento indicando o peso jurídico
-      da fonte (decisão casuística / precedente qualificado / enunciado persuasivo).
-    - Regra de divergência: quando documentos se contradizem, a LLM deve
-      registrar explicitamente o conflito em vez de sintetizá-los como consenso.
-    - Regra de nota de fontes: encerra a resposta com "Nota sobre as fontes:"
-      descrevendo o tipo e força vinculativa dos documentos utilizados.
+    v7 — adiciona Súmulas Vinculantes STF como fonte de maior hierarquia:
+    - Bloco [Súmula Vinculante STF N] com linha "Efeito: vinculante constitucional"
+      (art. 103-A CF) — acima das Teses STJ e acórdãos casuísticos.
+    - Regra de citação específica: citar como 'SV N/STF'.
+    - Nota de fontes atualizada com a hierarquia completa de 4 níveis.
     """
+    if sources_sv is None:
+        sources_sv = []
+
     context_parts: list[str] = []
+
+    # SVs primeiro — hierarquia máxima
+    for sv in sources_sv:
+        enunciado = _sanitize_doc_text(sv.enunciado)
+        context_parts.append(
+            f"[Súmula Vinculante STF {sv.numero}]\n"
+            f"Efeito: vinculante constitucional — obrigatória para todo o Judiciário e a "
+            f"administração pública (art. 103-A CF + Lei 11.417/2006).\n"
+            f"{enunciado}"
+        )
 
     for i, s in enumerate(sources):
         payload = _sanitize_doc_text(
@@ -223,14 +288,17 @@ def _build_prompt(
 
     if context_parts:
         context = "\n\n".join(context_parts)
+        has_sv = bool(sources_sv)
         has_acordaos = bool(sources)
         has_teses = bool(sources_teses)
-        if has_acordaos and has_teses:
-            fontes_desc = "acórdãos do STF e teses consolidadas do STJ"
-        elif has_teses:
-            fontes_desc = "teses consolidadas do STJ"
-        else:
-            fontes_desc = "acórdãos do STF"
+        partes: list[str] = []
+        if has_sv:
+            partes.append("súmulas vinculantes do STF")
+        if has_acordaos:
+            partes.append("acórdãos do STF")
+        if has_teses:
+            partes.append("teses consolidadas do STJ")
+        fontes_desc = " e ".join(partes) if partes else "documentos disponíveis"
     else:
         context = "Nenhum documento relevante encontrado."
         fontes_desc = "documentos disponíveis"
@@ -245,6 +313,8 @@ def _build_prompt(
         "   o mesmo ponto, NÃO os sintetize como consenso — registre a divergência:\n"
         "   'Há divergência entre os documentos: [fonte A] entende X, enquanto [fonte B] entende Y.'\n"
         "3. Após cada ponto, cite TODOS os documentos que o sustentam entre parênteses, separados por ponto e vírgula.\n"
+        "   - Súmula Vinculante STF: cite como 'SV N/STF', usando o número do rótulo [Súmula Vinculante STF N].\n"
+        "     Exemplo: '(SV 11/STF; SV 14/STF)'\n"
         "   - Acórdão STF: cite SOMENTE o número do processo (ex: HC 263552 AgR), que está na linha\n"
         "     imediatamente após o rótulo [Acórdão STF N]. NUNCA use o rótulo [Acórdão STF N] como citação.\n"
         "     Exemplo: '(HC 263552 AgR; HC 264610 AgR)'\n"
@@ -255,6 +325,8 @@ def _build_prompt(
         "     Exemplo: '(Súmula 528/STJ; Súmula 302/STJ)'\n"
         "4. Encerre a resposta com 'Nota sobre as fontes:' e descreva o peso jurídico\n"
         "   dos documentos utilizados, com base nas linhas 'Efeito:' de cada fonte:\n"
+        "   - Súmulas Vinculantes STF (vinculante constitucional) são obrigatórias para todo o Judiciário\n"
+        "     e a administração pública — o precedente de maior hierarquia (art. 103-A CF).\n"
         "   - Teses STJ (precedente qualificado) vinculam todos os tribunais (art. 927, III, CPC).\n"
         "   - Súmulas STJ (enunciado persuasivo) são consolidadas, mas não vinculantes.\n"
         "   - Acórdãos STF (decisão casuística) são persuasivos, salvo com repercussão geral.\n"

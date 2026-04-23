@@ -89,6 +89,21 @@
       </p>
     </header>
 
+    <!-- Disclaimer -->
+    <aside class="mb-8 flex gap-3 bg-amber-950/20 border border-amber-900/30 rounded-lg px-4 py-3" role="note" aria-label="Aviso legal">
+      <svg class="shrink-0 mt-0.5" width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M10 2L18.66 17H1.34L10 2Z" stroke="#b45309" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <line x1="10" y1="8" x2="10" y2="12.5" stroke="#b45309" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="10" cy="14.5" r="0.8" fill="#b45309"/>
+      </svg>
+      <p class="text-xs text-amber-600/80 leading-relaxed font-light">
+        <strong class="font-medium text-amber-600/90">Aviso legal:</strong>
+        Este sistema é uma ferramenta de pesquisa acadêmica sobre jurisprudência brasileira.
+        As respostas geradas por IA podem conter imprecisões e <strong class="font-medium">não constituem aconselhamento jurídico</strong>.
+        Para orientação sobre caso específico, consulte um advogado habilitado na OAB.
+      </p>
+    </aside>
+
     <!-- Query form -->
     <form id="form" onsubmit="handleSubmit(event)" novalidate>
       <div class="relative mb-3">
@@ -155,8 +170,9 @@
   </div>
 
   <!-- Footer -->
-  <footer class="py-5 text-center">
+  <footer class="py-5 text-center space-y-1">
     <p class="text-xs text-muted/40">IAJuris · UnB FGA · Engenharia de Software · 2025</p>
+    <p class="text-[0.65rem] text-muted/25">Ferramenta acadêmica — não substitui orientação jurídica profissional.</p>
   </footer>
 
   <script>
@@ -222,21 +238,67 @@
       setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     }
 
+    function buildPortalURL(tribunal, numero, tipo) {
+      const t = (tribunal || '').trim().toUpperCase();
+      const n = (numero || '').trim();
+      if (tipo === 'sumula_vinculante_stf') {
+        const m = n.match(/(\d+)/);
+        const num = m ? m[1] : '';
+        return {
+          href: 'https://portal.stf.jus.br/jurisprudencia/sumariosumula.asp?base=26&sumula=' + num,
+          label: 'STF · Súmula Vinculante ' + num,
+        };
+      }
+      if (tipo === 'tese_stj') {
+        return { href: 'https://scon.stj.jus.br/SCON/jt/', label: 'STJ · Jurisprudência em Teses' };
+      }
+      if (t === 'STF') {
+        const m = n.match(/^([A-Za-z]+)\s+(\d+)/);
+        if (m) {
+          return {
+            href: 'https://portal.stf.jus.br/processos/listarProcessos.asp'
+                  + '?classe=' + encodeURIComponent(m[1])
+                  + '&numeroProcesso=' + m[2],
+            label: 'Portal STF · página do processo',
+          };
+        }
+        return { href: 'https://portal.stf.jus.br/jurisprudencia/', label: 'Portal STF' };
+      }
+      if (t === 'STJ') {
+        return {
+          href: 'https://scon.stj.jus.br/SCON/pesquisar.jsp?b=ACOR&livre=' + encodeURIComponent(n),
+          label: 'STJ · SCON busca',
+        };
+      }
+      return null;
+    }
+
     function buildCard(s) {
-      const isTese   = s.tipo === 'tese_stj';
+      const isTese = s.tipo === 'tese_stj';
+      const isSV   = s.tipo === 'sumula_vinculante_stf';
       const fullText = s.ementa || '';
       const truncated = fullText.length > 260;
       const excerpt   = truncated ? fullText.slice(0, 260) + '…' : fullText;
+
+      const portal = buildPortalURL(s.tribunal, s.numero_processo, s.tipo);
+      const processoHtml = portal
+        ? `<a href="${esc(portal.href)}" target="_blank" rel="noopener noreferrer"
+              class="text-[0.68rem] text-muted hover:text-accent truncate max-w-[55%] text-right
+                     transition-colors duration-150 underline underline-offset-2
+                     decoration-muted/30 hover:decoration-accent"
+              title="${esc(portal.label)}">${esc(s.numero_processo)} ↗</a>`
+        : `<span class="text-[0.68rem] text-muted truncate max-w-[55%] text-right">${esc(s.numero_processo)}</span>`;
 
       const div = document.createElement('div');
       div.className = 'bg-surface border border-border rounded-lg px-4 py-3 transition-colors duration-150';
 
       div.innerHTML = `
         <div class="flex items-center justify-between gap-2 mb-1.5">
-          <span class="text-[0.7rem] font-medium text-accent uppercase tracking-wider">
-            ${esc(s.tribunal)}${isTese ? ' · Em Teses' : ''}
+          <span class="text-[0.7rem] font-medium uppercase tracking-wider
+            ${isSV ? 'text-amber-500' : 'text-accent'}">
+            ${esc(s.tribunal)}${isTese ? ' · Em Teses' : isSV ? ' · Súmula Vinculante' : ''}
           </span>
-          <span class="text-[0.68rem] text-muted truncate max-w-[55%] text-right">${esc(s.numero_processo)}</span>
+          ${processoHtml}
         </div>
         <p class="card-body text-xs text-muted leading-relaxed">${esc(excerpt)}</p>
         ${truncated ? `

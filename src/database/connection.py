@@ -121,6 +121,55 @@ CREATE TRIGGER IF NOT EXISTS teses_stj_au
 """
 
 # ---------------------------------------------------------------------------
+# DDL — tabela sumulas_vinculantes_stf
+# ---------------------------------------------------------------------------
+
+_DDL_SV_STF = """
+CREATE TABLE IF NOT EXISTS sumulas_vinculantes_stf (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero     INTEGER NOT NULL UNIQUE,
+    enunciado  TEXT    NOT NULL,
+    embedding  BLOB,
+    created_at TEXT    DEFAULT (datetime('now'))
+);
+"""
+
+_DDL_SV_STF_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS sumulas_vinculantes_stf_fts USING fts5(
+    enunciado,
+    content='sumulas_vinculantes_stf',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 1'
+);
+"""
+
+_DDL_SV_TRIGGER_INSERT = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_ai
+    AFTER INSERT ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(rowid, enunciado)
+        VALUES (new.id, new.enunciado);
+    END
+"""
+
+_DDL_SV_TRIGGER_DELETE = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_ad
+    AFTER DELETE ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(sumulas_vinculantes_stf_fts, rowid, enunciado)
+        VALUES ('delete', old.id, old.enunciado);
+    END
+"""
+
+_DDL_SV_TRIGGER_UPDATE = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_au
+    AFTER UPDATE ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(sumulas_vinculantes_stf_fts, rowid, enunciado)
+        VALUES ('delete', old.id, old.enunciado);
+        INSERT INTO sumulas_vinculantes_stf_fts(rowid, enunciado)
+        VALUES (new.id, new.enunciado);
+    END
+"""
+
+# ---------------------------------------------------------------------------
 # Triggers jurisprudencia FTS5
 # ---------------------------------------------------------------------------
 
@@ -231,7 +280,11 @@ async def init_db() -> None:
         )
 
     # Executa cada bloco DDL separadamente
-    for ddl_block in (_DDL_JURISPRUDENCIA, _DDL_FTS, _DDL_TESES_STJ, _DDL_TESES_STJ_FTS):
+    for ddl_block in (
+        _DDL_JURISPRUDENCIA, _DDL_FTS,
+        _DDL_TESES_STJ, _DDL_TESES_STJ_FTS,
+        _DDL_SV_STF, _DDL_SV_STF_FTS,
+    ):
         await _db.execute(ddl_block)
 
     # Triggers são criados individualmente para evitar problemas de parsing
@@ -243,6 +296,9 @@ async def init_db() -> None:
         _DDL_TESES_TRIGGER_INSERT,
         _DDL_TESES_TRIGGER_DELETE,
         _DDL_TESES_TRIGGER_UPDATE,
+        _DDL_SV_TRIGGER_INSERT,
+        _DDL_SV_TRIGGER_DELETE,
+        _DDL_SV_TRIGGER_UPDATE,
     ):
         await _db.execute(trigger_ddl)
 

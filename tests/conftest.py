@@ -115,6 +115,51 @@ CREATE TRIGGER IF NOT EXISTS teses_stj_au
     END
 """
 
+_DDL_SV_STF = """
+CREATE TABLE IF NOT EXISTS sumulas_vinculantes_stf (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero    INTEGER NOT NULL UNIQUE,
+    enunciado TEXT    NOT NULL,
+    embedding BLOB,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+"""
+
+_DDL_SV_STF_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS sumulas_vinculantes_stf_fts USING fts5(
+    enunciado,
+    content='sumulas_vinculantes_stf',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 1'
+);
+"""
+
+_DDL_SV_TRIGGER_INSERT = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_ai
+    AFTER INSERT ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(rowid, enunciado)
+        VALUES (new.id, new.enunciado);
+    END
+"""
+
+_DDL_SV_TRIGGER_DELETE = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_ad
+    AFTER DELETE ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(sumulas_vinculantes_stf_fts, rowid, enunciado)
+        VALUES ('delete', old.id, old.enunciado);
+    END
+"""
+
+_DDL_SV_TRIGGER_UPDATE = """
+CREATE TRIGGER IF NOT EXISTS sv_stf_au
+    AFTER UPDATE ON sumulas_vinculantes_stf BEGIN
+        INSERT INTO sumulas_vinculantes_stf_fts(sumulas_vinculantes_stf_fts, rowid, enunciado)
+        VALUES ('delete', old.id, old.enunciado);
+        INSERT INTO sumulas_vinculantes_stf_fts(rowid, enunciado)
+        VALUES (new.id, new.enunciado);
+    END
+"""
+
 # ---------------------------------------------------------------------------
 # Dados de exemplo
 # ---------------------------------------------------------------------------
@@ -242,6 +287,11 @@ async def db() -> aiosqlite.Connection:
             _DDL_TESES_TRIGGER_INSERT,
             _DDL_TESES_TRIGGER_DELETE,
             _DDL_TESES_TRIGGER_UPDATE,
+            _DDL_SV_STF,
+            _DDL_SV_STF_FTS,
+            _DDL_SV_TRIGGER_INSERT,
+            _DDL_SV_TRIGGER_DELETE,
+            _DDL_SV_TRIGGER_UPDATE,
         ):
             await conn.execute(ddl)
         await conn.commit()
@@ -258,6 +308,30 @@ async def db() -> aiosqlite.Connection:
             "INSERT INTO teses_stj (area, edicao_num, edicao_titulo, tese_num, tese_texto, julgados) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             _SAMPLE_TESES,
+        )
+
+        # Dados de SVs (trigger popula sumulas_vinculantes_stf_fts automaticamente)
+        await conn.executemany(
+            "INSERT INTO sumulas_vinculantes_stf (numero, enunciado) VALUES (?, ?)",
+            [
+                (
+                    11,
+                    "Só é lícito o uso de algemas em casos de resistência e de fundado receio de fuga "
+                    "ou de perigo à integridade física própria ou alheia, por parte do preso ou de "
+                    "terceiros, justificada a excepcionalidade por escrito, sob pena de responsabilidade "
+                    "disciplinar, civil e penal do agente ou da autoridade e de nulidade da prisão ou do "
+                    "ato processual a que se refere, sem prejuízo da responsabilidade civil do Estado.",
+                ),
+                (
+                    25,
+                    "É ilícita a prisão civil de depositário infiel, qualquer que seja a modalidade do depósito.",
+                ),
+                (
+                    37,
+                    "Não cabe ao Poder Judiciário, que não tem função legislativa, aumentar vencimentos "
+                    "de servidores públicos sob o fundamento de isonomia.",
+                ),
+            ],
         )
 
         await conn.commit()

@@ -21,7 +21,7 @@ from src.services.rag_service import (
     _extract_ementa_payload,
     answer,
 )
-from src.services.search_service import SearchResult, TesesResult
+from src.services.search_service import SearchResult, TesesResult, SumulaVinculanteResult
 
 
 # --------------------------------------------------------------------------
@@ -50,6 +50,14 @@ def _make_tese(
         id=id, area=area, edicao_num=edicao_num, edicao_titulo=edicao_titulo,
         tese_num=tese_num, tese_texto=texto, julgados="REsp 123/SP", rank=-1.0
     )
+
+
+def _make_sv(
+    id: int = 1,
+    numero: int = 11,
+    enunciado: str = "So e licito o uso de algemas em casos de resistencia.",
+) -> SumulaVinculanteResult:
+    return SumulaVinculanteResult(id=id, numero=numero, enunciado=enunciado, rank=-1.0)
 
 
 # ===========================================================================
@@ -398,3 +406,55 @@ def test_extract_ementa_result_respects_max_chars() -> None:
     result = _extract_ementa_payload(ementa, max_chars=300)
     # Pode ser ligeiramente maior devido as marcacoes [...], mas nao excessivo
     assert len(result) <= 600
+
+
+# ===========================================================================
+# Testes — Súmulas Vinculantes STF no prompt (v7)
+# ===========================================================================
+
+
+def test_build_prompt_sv_aparece_antes_dos_acordaos() -> None:
+    """Bloco de SV deve preceder os blocos de acórdão no prompt."""
+    sv = _make_sv(numero=11, enunciado="Uso de algemas restrito a casos excepcionais.")
+    acordao = _make_acordao(numero="HC 100001")
+    prompt = _build_prompt("pergunta", [acordao], [], [sv])
+    pos_sv = prompt.index("[Súmula Vinculante STF 11]")
+    pos_ac = prompt.index("[Acórdão STF 1]")
+    assert pos_sv < pos_ac, "SV deve preceder acórdãos no contexto do prompt"
+
+
+def test_build_prompt_sv_tem_efeito_vinculante_constitucional() -> None:
+    """Linha Efeito: da SV deve mencionar 'vinculante constitucional' e art. 103-A."""
+    sv = _make_sv(numero=25, enunciado="E ilicita a prisao civil de depositario infiel.")
+    prompt = _build_prompt("pergunta", [], [], [sv])
+    assert "vinculante constitucional" in prompt
+    assert "103-A" in prompt
+
+
+def test_build_prompt_sv_regra_citacao_presente() -> None:
+    """Regra de citação de SV como 'SV N/STF' deve estar no prompt."""
+    prompt = _build_prompt("pergunta", [], [], [_make_sv()])
+    assert "SV N/STF" in prompt or "SV 11/STF" in prompt or "SV" in prompt
+
+
+def test_build_prompt_sv_nota_fontes_menciona_hierarquia_maxima() -> None:
+    """Nota sobre as fontes deve incluir referência à hierarquia máxima das SVs."""
+    prompt = _build_prompt("pergunta", [], [], [_make_sv()])
+    assert "Nota sobre as fontes:" in prompt
+    assert "art. 103-A" in prompt
+
+
+def test_build_prompt_sv_fontes_desc_inclui_sumulas_vinculantes() -> None:
+    """Com SVs presentes, fontes_desc deve mencionar 'súmulas vinculantes'."""
+    sv = _make_sv()
+    prompt = _build_prompt("pergunta", [], [], [sv])
+    assert "súmulas vinculantes" in prompt.lower()
+
+
+def test_build_prompt_sem_sv_nao_insere_bloco_numerado_no_contexto() -> None:
+    """Sem SVs, o contexto não deve conter bloco com número real (ex: [Súmula Vinculante STF 11])."""
+    import re
+    prompt = _build_prompt("pergunta", [_make_acordao()], [], [])
+    # As instruções de citação mencionam "[Súmula Vinculante STF N]" (literal N),
+    # mas não deve existir bloco com número real como [Súmula Vinculante STF 11].
+    assert not re.search(r'\[Súmula Vinculante STF \d+\]', prompt)

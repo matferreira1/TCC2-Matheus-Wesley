@@ -23,7 +23,7 @@ from typing import TypeVar
 import aiosqlite
 import numpy as np
 
-from src.services.search_service import SearchResult, TesesResult
+from src.services.search_service import SearchResult, TesesResult, SumulaVinculanteResult
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _model = None
 _acordao_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
 _teses_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
+_sv_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
 
 T = TypeVar("T")
 
@@ -131,11 +132,40 @@ async def _load_teses_cache(
     return _teses_cache
 
 
+async def _load_sv_cache(
+    conn: aiosqlite.Connection,
+) -> tuple[list[int], list[tuple], np.ndarray] | None:
+    global _sv_cache
+    if _sv_cache is not None:
+        return _sv_cache
+
+    try:
+        cur = await conn.execute(
+            "SELECT id, numero, enunciado, embedding "
+            "FROM sumulas_vinculantes_stf WHERE embedding IS NOT NULL"
+        )
+    except Exception:
+        return None
+
+    rows = await cur.fetchall()
+    if not rows:
+        return None
+
+    ids = [r[0] for r in rows]
+    meta = [(r[1] or 0, r[2] or "") for r in rows]
+    vectors = np.stack([_deserialize(r[3]) for r in rows])
+
+    _sv_cache = (ids, meta, vectors)
+    logger.info("Cache semântico: %d súmulas vinculantes carregadas.", len(ids))
+    return _sv_cache
+
+
 def clear_cache() -> None:
     """Invalida caches em memória (usar após re-execução do ETL)."""
-    global _acordao_cache, _teses_cache
+    global _acordao_cache, _teses_cache, _sv_cache
     _acordao_cache = None
     _teses_cache = None
+    _sv_cache = None
     logger.info("Caches semânticos invalidados.")
 
 
@@ -212,6 +242,31 @@ async def search_teses_semantic(
     ]
 
 
+async def search_sv_semantic(
+    conn: aiosqlite.Connection,
+    query: str,
+    top_k: int = 5,
+) -> list[SumulaVinculanteResult]:
+    """Retorna top_k Súmulas Vinculantes por similaridade semântica com a query."""
+    cache = await _load_sv_cache(conn)
+    if cache is None:
+        return []
+
+    ids, meta, vectors = cache
+    query_vec = _embed_query(query)
+    top = _top_k_by_cosine(query_vec, vectors, top_k)
+
+    return [
+        SumulaVinculanteResult(
+            id=ids[idx],
+            numero=meta[idx][0],
+            enunciado=meta[idx][1],
+            rank=-score,
+        )
+        for idx, score in top
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Reciprocal Rank Fusion (RRF)
 # ---------------------------------------------------------------------------
@@ -255,6 +310,29 @@ def rrf_teses(
     """Funde rankings lexical e semântico de teses via RRF."""
     scores: dict[int, float] = {}
     doc_map: dict[int, TesesResult] = {}
+
+    for rank, doc in enumerate(lexical):
+        scores[doc.id] = scores.get(doc.id, 0.0) + 1.0 / (k + rank + 1)
+        doc_map[doc.id] = doc
+
+    for rank, doc in enumerate(semantic):
+        scores[doc.id] = scores.get(doc.id, 0.0) + 1.0 / (k + rank + 1)
+        if doc.id not in doc_map:
+            doc_map[doc.id] = doc
+
+    ranked = sorted(scores, key=lambda i: scores[i], reverse=True)
+    return [doc_map[i] for i in ranked[:top_n]]
+
+
+def rrf_sv(
+    lexical: list[SumulaVinculanteResult],
+    semantic: list[SumulaVinculanteResult],
+    top_n: int,
+    k: int = 60,
+) -> list[SumulaVinculanteResult]:
+    """Funde rankings lexical e semântico de Súmulas Vinculantes via RRF."""
+    scores: dict[int, float] = {}
+    doc_map: dict[int, SumulaVinculanteResult] = {}
 
     for rank, doc in enumerate(lexical):
         scores[doc.id] = scores.get(doc.id, 0.0) + 1.0 / (k + rank + 1)

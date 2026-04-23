@@ -60,7 +60,10 @@ Montagem do prompt — acórdãos STF + teses/súmulas STJ (seções III e IV ex
 LLM (Groq llama-3.3-70b-versatile  /  Ollama llama3.2:3b)
       │
       ▼
-Resposta estruturada + fontes citadas
+Filtragem de fontes — cross-encoder pontua pares (resposta, fonte); descarta irrelevantes
+      │
+      ▼
+Resposta estruturada + fontes citadas (apenas as correlacionadas com a resposta)
 ```
 
 1. A query é expandida com sinônimos jurídicos (`query_expansion.py`) e submetida a **quatro buscas em paralelo** via `asyncio.gather`: FTS5/BM25 e busca semântica (embeddings) sobre acórdãos STF e teses/súmulas STJ.
@@ -76,10 +79,11 @@ Resposta estruturada + fontes citadas
 
 | Fonte | Conteúdo | Documentos |
 |---|---|---|
+| STF — Súmulas Vinculantes | SV 1 a SV 59 (vinculantes constitucionais — art. 103-A CF) | 59 |
 | STF — Portal de pesquisa | Acórdãos exportados em CSV (set/2025 – mar/2026) | 3.420 |
 | STJ — Jurisprudência em Teses | Teses consolidadas por edição temática | 3.378 |
 | STJ — Súmulas | Súmulas do STJ | 676 |
-| **Total** | | **7.474** |
+| **Total** | | **7.533** |
 
 Todos os documentos possuem embedding vetorial (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dims) armazenado como BLOB no SQLite, habilitando a busca semântica híbrida.
 
@@ -153,7 +157,7 @@ DEBUG=false
 
 ## Carga dos dados (ETL)
 
-Os CSVs de acórdãos do STF devem estar em `data/raw/`. Os arquivos STJ (`JTSelecao.txt`, `SelecaoSumulas.txt`) devem estar em `data/stj/`.
+Os CSVs de acórdãos do STF devem estar em `data/raw/`. Os arquivos STJ (`JTSelecao.txt`, `SelecaoSumulas.txt`) devem estar em `data/stj/`. O arquivo de SVs (`sumulas_vinculantes.txt`) já está em `data/stf/`.
 
 ```bash
 # 1. Acórdãos STF
@@ -166,7 +170,10 @@ Os CSVs de acórdãos do STF devem estar em `data/raw/`. Os arquivos STJ (`JTSel
 # 3. Súmulas STJ
 .venv/bin/python -m etl.load_sumulas_stj
 
-# 4. Gerar embeddings (necessário para busca semântica)
+# 4. Súmulas Vinculantes STF (arquivo data/stf/sumulas_vinculantes.txt já incluso)
+.venv/bin/python -m etl.load_sumulas_vinculantes_stf
+
+# 5. Gerar embeddings (necessário para busca semântica — inclui SVs)
 .venv/bin/python -m etl.generate_embeddings
 ```
 
@@ -243,7 +250,7 @@ curl -X POST http://localhost:8000/api/v1/query \
 .venv/bin/python -m pytest tests/ --tb=short
 ```
 
-A suite possui **107 testes** cobrindo todos os módulos (ETL, busca, RAG, LLM, API, métricas). Todos os testes utilizam banco SQLite `:memory:` e mocks de LLM — nenhuma conexão de rede real é necessária para executá-los.
+A suite possui **177 testes** cobrindo todos os módulos (ETL, busca, RAG, LLM, API, métricas, reranking). Todos os testes utilizam banco SQLite `:memory:` e mocks de LLM — nenhuma conexão de rede real é necessária para executá-los.
 
 ### Testes de carga (Locust)
 
@@ -277,6 +284,7 @@ iajuris/
 │
 ├── data/
 │   ├── raw/                  # CSVs de acórdãos STF
+│   ├── stf/                  # sumulas_vinculantes.txt (SV 1–59)
 │   ├── stj/                  # JTSelecao.txt, SelecaoSumulas.txt, jurispruConsumidor.txt
 │   └── db/
 │       └── iajuris.db        # Banco SQLite + FTS5 + embeddings BLOB
@@ -287,6 +295,7 @@ iajuris/
 │   ├── load.py               # Carga dos acórdãos STF no banco
 │   ├── load_teses_stj.py     # Parser e carga das teses STJ (+ load_area())
 │   ├── load_sumulas_stj.py   # Parser e carga das súmulas STJ
+│   ├── load_sumulas_vinculantes_stf.py  # Parser e carga das SVs STF
 │   └── generate_embeddings.py# Vetorização do corpus (MiniLM → BLOB SQLite)
 │
 ├── load_tests/
@@ -327,6 +336,7 @@ iajuris/
     ├── conftest.py            # Fixture db (SQLite :memory: + schema + dados de referência)
     ├── test_search.py         # 23 testes — search() e search_teses()
     ├── test_rag.py            # 26 testes — answer(), _build_prompt(), _extract_ementa_payload()
+    ├── test_rerank.py         # 22 testes — rerank(), filter_by_answer(), _get_text()
     ├── test_ollama.py         # 9 testes  — generate(), health_check()
     ├── test_groq.py           # 11 testes — _get_client(), generate(), health_check()
     ├── test_api.py            # 12 testes — validação, sucesso, erros HTTP

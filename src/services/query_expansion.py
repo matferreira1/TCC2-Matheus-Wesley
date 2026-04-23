@@ -31,8 +31,10 @@ _SYNONYMS: dict[str, frozenset[str]] = {
     "recurso especial": frozenset({"resp"}),
     "acao direta inconstitucionalidade": frozenset({"adi"}),
     "adi": frozenset({"inconstitucionalidade", "direta"}),
-    "agravo regimental": frozenset({"agr"}),
-    "agr": frozenset({"agravo", "regimental"}),
+    "agravo regimental": frozenset({"agr", "agint"}),
+    "agr": frozenset({"agravo", "regimental", "agint"}),
+    "agravo interno": frozenset({"agint", "agr"}),
+    "agint": frozenset({"agravo", "interno", "agr"}),
     "agravo instrumento": frozenset({"agravo"}),
     "are": frozenset({"recurso", "extraordinario", "re"}),
     "resp": frozenset({"recurso", "especial"}),
@@ -106,6 +108,11 @@ _SYNONYMS: dict[str, frozenset[str]] = {
     "sumula": frozenset({"enunciado", "jurisprudencia", "orientacao"}),
     "jurisprudencia": frozenset({"sumula", "precedente", "julgado"}),
     "precedente": frozenset({"jurisprudencia", "sumula", "orientacao"}),
+    # ── Súmulas Vinculantes STF ───────────────────────────────────────────────
+    "sumula vinculante": frozenset({"sv", "vinculante", "stf"}),
+    "sumulas vinculantes": frozenset({"sv", "vinculante", "stf"}),
+    "vinculante": frozenset({"sumula", "obrigatorio", "stf"}),
+    "sv": frozenset({"sumula", "vinculante", "stf"}),
 }
 
 

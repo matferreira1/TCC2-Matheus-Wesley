@@ -2221,3 +2221,251 @@ Cinco novos testes em `tests/test_rag.py`:
 - ✅ **Divergência jurisprudencial** explicitamente registrada em vez de sintetizada como falso consenso
 - ✅ **Peso vinculativo comunicado** ao usuário ao final de cada resposta via "Nota sobre as fontes:"
 - ✅ **Três tipos de fonte diferenciados** no contexto: casuístico (acórdão), precedente qualificado (tese), persuasivo (súmula)
+
+---
+
+## Fase 19 — Sinônimo AgInt no Query Expansion (23 de abril de 2026)
+
+### 19.1 Motivação
+
+O NCPC 2015 renomeou o **Agravo Regimental** (AgRg) para **Agravo Interno** (AgInt) em todo o sistema judiciário. Acórdãos do STF e STJ anteriores a 2015 usam "AgRg"; pós-2015 usam "AgInt". O dicionário de sinônimos cobria apenas "agr" (AgRg), deixando acórdãos pós-NCPC menos encontráveis quando o usuário pesquisava pelo nomen juris antigo ou vice-versa.
+
+### 19.2 Mudança Implementada
+
+Quatro entradas adicionadas/atualizadas em `_SYNONYMS` (`query_expansion.py`):
+
+| Entrada (chave) | Sinônimos adicionados | Motivo |
+|---|---|---|
+| `"agravo regimental"` | `"agint"` adicionado | Equivalência funcional pré/pós-NCPC |
+| `"agr"` | `"agint"` adicionado | Cross-link sigla → sigla |
+| `"agravo interno"` *(nova)* | `{"agint", "agr"}` | Busca pelo nomen pós-NCPC expande para siglas |
+| `"agint"` *(nova)* | `{"agravo", "interno", "agr"}` | Sigla pós-NCPC expande para termos e sigla pré-NCPC |
+
+Com essa mudança, qualquer busca envolvendo "agravo regimental", "AgRg", "agravo interno" ou "AgInt" recupera documentos dos dois períodos históricos.
+
+### 19.3 Arquivos Criados ou Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/query_expansion.py` | 2 entradas atualizadas + 2 novas entradas no `_SYNONYMS` |
+
+### 19.4 Estado Após a Fase 19
+
+- ✅ **Acórdãos pós-NCPC (AgInt) encontráveis** por qualquer variação da sigla ou nome completo
+- ✅ **Cross-link bidirecional**: AgRg ↔ AgInt, "agravo regimental" ↔ "agravo interno"
+- ✅ **Zero impacto em testes**: alteração restrita ao dicionário estático, sem mudança de interface
+
+---
+
+## Fase 20 — Disclaimer Legal na Interface Web (23 de abril de 2026)
+
+### 20.1 Motivação
+
+Qualquer sistema que opere no domínio jurídico e gere respostas a partir de documentos legais tem obrigação ética e prática de comunicar ao usuário que o sistema **não é um substituto para assessoria jurídica profissional**. Ausência de disclaimer pode:
+
+- Induzir usuário leigo a tomar decisões jurídicas com base em resposta de IA imprecisa
+- Configurar exercício irregular da advocacia caso o sistema seja percebido como orientação personalizada
+- Comprometer a credibilidade acadêmica do TCC ao apresentar o sistema sem ressalvas
+
+O OAB e a Resolução CFJ n. 345/2020 orientam que sistemas de IA para o domínio jurídico devem ser transparentes sobre suas limitações.
+
+### 20.2 Implementação
+
+**Banner permanente** (`<aside>` com `role="note"`) inserido entre o header e o formulário — posição ideal porque o usuário lê antes de submeter qualquer consulta:
+
+- Cor âmbar sutil (não alarmista, mas distinta do fundo) — `bg-amber-950/20 border border-amber-900/30`
+- Ícone de triângulo de aviso em SVG inline (sem dependência externa)
+- Texto em duas partes: (a) contexto do sistema ("ferramenta de pesquisa acadêmica"), (b) instrução direta ("não constituem aconselhamento jurídico — consulte um advogado habilitado na OAB")
+- `aria-label="Aviso legal"` para leitores de tela
+
+**Nota no footer** — segunda âncora visual, discreta (`text-[0.65rem] text-muted/25`), para usuários que rolam até o fim da página.
+
+### 20.3 Decisões de Projeto
+
+**Permanente vs. modal descartável:** Modal com "aceite" seria mais intrusivo e poderia ser ignorado com um clique. Banner permanente garante que o aviso permanece visível durante toda a sessão sem travar o fluxo.
+
+**Cor âmbar vs. vermelho:** Vermelho transmite erro/falha. Âmbar comunica atenção sem alarme — adequado para um aviso informativo em sistema que funciona corretamente.
+
+**OAB mencionada explicitamente:** Ancoragem em instituição reconhecida aumenta credibilidade do aviso e orienta o usuário sobre onde buscar ajuda.
+
+### 20.4 Arquivos Criados ou Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `static/index.html` | Banner `<aside>` com disclaimer inserido entre header e formulário; nota adicional no `<footer>` |
+
+### 20.5 Estado Após a Fase 20
+
+- ✅ **Disclaimer permanente e sempre visível** antes do campo de consulta
+- ✅ **Acessível via `role="note"` e `aria-label`** para tecnologias assistivas
+- ✅ **Nota reforçada no footer** como segunda âncora visual
+- ✅ **Sem impacto no fluxo de uso**: banner informativo, não bloqueante
+
+---
+
+## Fase 21 — Links para Portais STF/STJ nos Cards de Fonte (23 de abril de 2026)
+
+### 21.1 Motivação
+
+Os cards de fonte exibiam tribunal e número do processo apenas como texto estático. Para verificar a decisão original — especialmente relevante porque o STF armazena muitos acórdãos como PDFs agrupados no portal — o usuário precisava abrir o portal manualmente e redigitar o número. A adição de link direto elimina essa fricção.
+
+**Limite técnico:** os portais não expõem URL por documento para todos os acórdãos. O teto realista por tipo de fonte é:
+- **STF acórdão** → página do processo no portal STF (`listarProcessos.asp?classe=X&numeroProcesso=Y`): um clique acima do PDF, mas lista todas as decisões daquele processo com links para download.
+- **STJ tese** → portal Em Teses (`scon.stj.jus.br/SCON/jt/`): sem deep link por edição via URL pública.
+- **STJ acórdão** → busca SCON pré-preenchida com o número do processo.
+
+### 21.2 Implementação
+
+**Função `buildPortalURL(tribunal, numero, tipo)`** adicionada ao script do `index.html`:
+
+```javascript
+if (tipo === 'tese_stj')
+  → https://scon.stj.jus.br/SCON/jt/
+
+if (tribunal === 'STF')
+  regex /^([A-Za-z]+)\s+(\d+)/ extrai classe e número
+  → https://portal.stf.jus.br/processos/listarProcessos.asp?classe=HC&numeroProcesso=264486
+
+if (tribunal === 'STJ')  (acórdão)
+  → https://scon.stj.jus.br/SCON/pesquisar.jsp?b=ACOR&livre=%22HC+264486%22
+```
+
+**Regex de parsing** (`/^([A-Za-z]+)\s+(\d+)/`) cobre todos os formatos observados no banco:
+- `"HC 264486 AgR"` → classe=HC, num=264486
+- `"ARE 1583790 AgR-ED"` → classe=ARE, num=1583790
+- `"Rcl 89658 ED"` → classe=Rcl, num=89658
+- `"ADI 7415 ED"` → classe=ADI, num=7415
+
+**Integração no card** (`buildCard`): o `span` do `numero_processo` é substituído por um `<a>` quando a URL está disponível. Estilo: `text-muted` em repouso → `text-accent` no hover, sublinhado discreto (`underline-offset-2 decoration-muted/30`). Atributos `target="_blank" rel="noopener noreferrer"` para segurança. `↗` no final sinaliza link externo. `title` exibe o rótulo do destino no tooltip.
+
+### 21.3 Arquivos Criados ou Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `static/index.html` | Função `buildPortalURL()` adicionada; `buildCard()` atualizado para gerar `<a>` clicável quando URL disponível |
+
+### 21.4 Estado Após a Fase 21
+
+- ✅ **Número do processo é link clicável** em todos os cards com tribunal reconhecido
+- ✅ **STF**: link para página do processo (`listarProcessos.asp`) — acesso direto ao acórdão ou PDF
+- ✅ **STJ teses**: link para Em Teses (máximo possível sem deep link por edição)
+- ✅ **Fallback gracioso**: se tribunal desconhecido, mantém `<span>` estático sem quebrar o card
+- ✅ **Zero dependências novas**: lógica em JS vanilla no mesmo arquivo
+
+---
+
+## Fase 22 — Súmulas Vinculantes STF no Corpus (23 de abril de 2026)
+
+### 22.1 Motivação
+
+As Súmulas Vinculantes do STF (art. 103-A CF + Lei 11.417/2006) são o precedente de maior hierarquia no ordenamento jurídico brasileiro: vinculam **obrigatoriamente** todo o Judiciário e a administração pública direta e indireta de todos os entes federados. Qualquer sistema de pesquisa jurídica que não as inclua pode responder sobre temas como uso de algemas (SV 11), nepotismo (SV 13), prisão de depositário infiel (SV 25) ou regime prisional (SV 56) sem citar a norma vinculante mais forte disponível — lacuna material para um advogado.
+
+Hierarquia de precedentes implementada após esta fase:
+```
+Súmula Vinculante STF (vinculante constitucional)  ← NOVO
+    ↓
+Tese STJ (precedente qualificado — art. 927, III, CPC)
+    ↓
+Súmula STJ (enunciado persuasivo consolidado)
+    ↓
+Acórdão STF/STJ (casuístico / persuasivo)
+```
+
+### 22.2 Arquitetura
+
+**Tabela dedicada** `sumulas_vinculantes_stf` (separada de `teses_stj`) para distinção clara de tipo e hierarquia. Schema: `id, numero INTEGER UNIQUE, enunciado TEXT, embedding BLOB`.
+
+**Corpus de SVs:** 59 súmulas vinculantes (SV 1 a SV 59) em `data/stf/sumulas_vinculantes.txt`. SV 18 e SV 19 omitidas do arquivo pois referem-se a matérias que foram objeto de cancelamento ou não possuíam texto consolidado.
+
+**Busca de 6 corrotinas paralelas** (era 4): `asyncio.gather` agora inclui `search_sumulas_vinculantes` (FTS5) e `search_sv_semantic` (semântico). As SVs passam por `rrf_sv` e pelo cross-encoder antes de entrar no prompt.
+
+**Limite de SVs no prompt:** máx. 2 SVs por consulta (corpus de ~60 docs com BM25 + semântica — qualidade alta sem custo de contexto). Candidatos: 8 FTS5 + 8 semântico → RRF top-3 → rerank → top-2.
+
+### 22.3 Mudanças por Camada
+
+| Camada | Arquivo | Alteração |
+|---|---|---|
+| Dados | `data/stf/sumulas_vinculantes.txt` | 59 SVs no formato `SÚMULA VINCULANTE N / texto` |
+| ETL | `etl/load_sumulas_vinculantes_stf.py` | Parser regex + carga idempotente + flag `--force` |
+| Banco | `src/database/connection.py` | DDL tabela + FTS5 + 3 triggers (insert/delete/update) |
+| Busca lexical | `src/services/search_service.py` | `SumulaVinculanteResult` dataclass + `search_sumulas_vinculantes()` |
+| Busca semântica | `src/services/semantic_service.py` | `_load_sv_cache()` + `search_sv_semantic()` + `rrf_sv()` |
+| Pipeline RAG | `src/services/rag_service.py` | `sources_sv` em `RagResponse`; 6ª busca paralela; `rrf_sv`; `_build_prompt()` v7 |
+| Prompt | `src/services/rag_service.py` | Bloco `[Súmula Vinculante STF N]` com `Efeito: vinculante constitucional`; regra de citação `SV N/STF`; nota de fontes com 4 níveis hierárquicos |
+| API | `src/api/routes/query.py` | `sources_sv` → `SourceDocument(tipo="sumula_vinculante_stf")` no início da lista |
+| Expansão | `src/services/query_expansion.py` | 4 entradas: `"sumula vinculante"`, `"sumulas vinculantes"`, `"vinculante"`, `"sv"` |
+| Frontend | `static/index.html` | `buildPortalURL` para `sumula_vinculante_stf` → `sumariosumula.asp`; badge âmbar `STF · Súmula Vinculante` |
+| Testes | `tests/conftest.py` | DDLs + triggers + 3 SVs de amostra na fixture `db` |
+| Testes | `tests/test_rag.py` | `_make_sv()` helper + 6 novos testes de `_build_prompt()` com SVs |
+
+### 22.4 Prompt v7 — Principais Mudanças em Relação ao v6
+
+1. **Blocos de SV inseridos antes dos acórdãos** (hierarquia máxima primeiro no contexto)
+2. **Linha `Efeito:` específica**: `"vinculante constitucional — obrigatória para todo o Judiciário e a administração pública (art. 103-A CF + Lei 11.417/2006)."`
+3. **Regra de citação**: `SV N/STF` (ex: `SV 11/STF; SV 14/STF`)
+4. **`fontes_desc` dinâmico**: inclui `"súmulas vinculantes do STF"` quando SVs presentes
+5. **Nota de fontes com 4 níveis hierárquicos** (era 3): SV > Tese STJ > Súmula STJ > Acórdão
+
+### 22.5 Como Executar o ETL de SVs
+
+```bash
+# Primeira carga (após load.py e load_teses_stj.py):
+python -m etl.load_sumulas_vinculantes_stf
+
+# Gerar embeddings para as SVs:
+python -m etl.generate_embeddings
+
+# Forçar recarga:
+python -m etl.load_sumulas_vinculantes_stf --force
+```
+
+### 22.6 Estado Após a Fase 22
+
+- ✅ **167 testes passando** (0 falhas, 0 skips) — 6 testes novos de SV em `test_rag.py`
+- ✅ **59 SVs no corpus** (SV 1 a SV 59) prontas para carga e vetorização
+- ✅ **Pipeline com 6 buscas paralelas** — FTS5 + semântico para acórdãos, teses e SVs
+- ✅ **Hierarquia de precedentes completa** no prompt: SV > Tese STJ > Súmula STJ > Acórdão
+- ✅ **Badge âmbar distinto** no frontend para diferenciar SVs dos demais tipos de fonte
+- ✅ **Link direto** para página da SV no portal STF (`sumariosumula.asp?base=26&sumula=N`)
+
+---
+
+## Fase 23 — Filtragem de Fontes por Relevância com o Cross-Encoder (23 de abril de 2026)
+
+### 23.1 Motivação
+
+O pipeline recuperava e exibia **todas** as fontes top-k ao usuário, mesmo quando o LLM utilizou apenas parte delas na resposta. Isso gerava ruído na UI e reduzia a confiança do usuário nas referências apresentadas.
+
+### 23.2 Solução: filter_by_answer()
+
+Após o LLM gerar a resposta, o mesmo cross-encoder já carregado em memória (sem custo adicional de I/O) pontua cada par `(resposta_gerada, fonte)`. Fontes com score abaixo do *decision boundary* do modelo (`threshold = 0.0`) são descartadas antes de retornar ao cliente.
+
+**Por que o cross-encoder em vez de parsing de citações?**
+
+A opção alternativa — parsear as citações entre parênteses que o prompt exige — foi descartada por fragilidade: o LLM às vezes abrevia identificadores longos (ex.: Tese STJ com área + edição + número), causando falsos negativos silenciosos. O cross-encoder avalia o conteúdo semântico sem depender de formato de texto.
+
+**Threshold de 0.0:** O modelo `mmarco-mMiniLMv2-L12-H384-v1` foi treinado em MS MARCO multilíngue e usa 0.0 como fronteira natural entre relevante/irrelevante nos seus logits de saída.
+
+**Fallback:** Se nenhuma fonte passar o threshold (ex.: pergunta genérica onde o LLM respondeu "não encontrei informação suficiente"), as listas originais são retornadas intactas para evitar UI sem fontes.
+
+**Latência adicional:** ~50–100 ms para N ≤ 11 pares (6 acórdãos + 3 teses + 2 SVs), negligível frente aos 2–5 s da chamada ao LLM. O modelo já estava em memória desde o reranking, portanto sem custo de carregamento.
+
+### 23.3 Correção de Bug: _get_text para SumulaVinculanteResult
+
+Identificado que `_get_text()` em `rerank_service.py` não tratava `SumulaVinculanteResult` — caia no branch de `TesesResult` e tentava acessar `.area` e `.tese_texto` inexistentes. Corrigido com branch `isinstance(doc, SumulaVinculanteResult)` que retorna `doc.enunciado`.
+
+### 23.4 Mudanças por Arquivo
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/rerank_service.py` | Import `SumulaVinculanteResult`; TypeVar estendido; `_get_text` corrigido; `_ANSWER_FILTER_THRESHOLD = 0.0`; nova função `filter_by_answer()` |
+| `src/services/rag_service.py` | Nova função `_filter_cited_sources()`; chamada pós-LLM no pipeline, gated em `reranker_enabled` |
+| `tests/test_rerank.py` | Helper `_sv()`; 2 testes de `_get_text` para SV; 8 testes de `filter_by_answer()` |
+
+### 23.5 Estado Após a Fase 23
+
+- ✅ **177 testes passando** (0 falhas, 0 skips) — 10 testes novos em `test_rerank.py`
+- ✅ **Fontes filtradas semanticamente** antes de retornar ao cliente
+- ✅ **Bug corrigido** — `_get_text` agora lida corretamente com os 3 tipos de documento
+- ✅ **Fallback gracioso** — nenhuma fonte passa → retorna lista original
+- ✅ **Sem custo de latência significativo** — cross-encoder já carregado em memória

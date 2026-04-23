@@ -40,6 +40,16 @@ class TesesResult:
     rank: float
 
 
+@dataclass
+class SumulaVinculanteResult:
+    """Representa uma Súmula Vinculante do STF (tabela sumulas_vinculantes_stf)."""
+
+    id: int
+    numero: int
+    enunciado: str
+    rank: float
+
+
 async def search(
     conn: aiosqlite.Connection,
     query: str,
@@ -178,6 +188,79 @@ async def search_teses(
             tese_num=row["tese_num"] or 0,
             tese_texto=row["tese_texto"] or "",
             julgados=row["julgados"] or "",
+            rank=row["rank"],
+        )
+        for row in rows
+    ]
+
+
+async def search_sumulas_vinculantes(
+    conn: aiosqlite.Connection,
+    query: str,
+    top_k: int = 2,
+) -> list[SumulaVinculanteResult]:
+    """
+    Busca as ``top_k`` Súmulas Vinculantes STF mais relevantes via BM25.
+
+    Retorna lista vazia se a tabela não existir ou estiver vazia.
+    """
+    if not query.strip():
+        return []
+
+    import re as _re
+
+    try:
+        cur_chk = await conn.execute("SELECT COUNT(*) FROM sumulas_vinculantes_stf")
+        count = (await cur_chk.fetchone())[0]
+        if count == 0:
+            logger.debug("sumulas_vinculantes_stf vazia — busca ignorada.")
+            return []
+    except Exception:
+        logger.debug("sumulas_vinculantes_stf não encontrada — busca ignorada.")
+        return []
+
+    _STOPWORDS = {
+        "o", "a", "os", "as", "um", "uma", "de", "do", "da", "dos", "das",
+        "em", "no", "na", "nos", "nas", "por", "para", "com", "que", "se",
+        "ao", "aos", "à", "às", "e", "é", "ou", "mas", "como", "mais",
+        "seu", "sua", "seus", "suas", "me", "te", "lhe", "nos", "não",
+        "isso", "isto", "aqui", "ali", "já", "também", "segundo",
+    }
+    tokens = [
+        t for t in _re.sub(r'["\'\'\(\)\*\^\-\+:,\.!?]', " ", query).lower().split()
+        if t not in _STOPWORDS and len(t) > 2
+    ]
+    if not tokens:
+        return []
+    expanded = expand_query(tokens)
+    if expanded:
+        logger.debug("Query expansion SVs: +%d termos: %s", len(expanded), expanded)
+        tokens = tokens + expanded
+    safe_query = " OR ".join(tokens)
+    logger.info("FTS5 SVs query: '%s' | top_k=%d", safe_query, top_k)
+
+    sql = """
+        SELECT s.id, s.numero, s.enunciado, sumulas_vinculantes_stf_fts.rank
+        FROM sumulas_vinculantes_stf_fts
+        JOIN sumulas_vinculantes_stf s ON s.id = sumulas_vinculantes_stf_fts.rowid
+        WHERE sumulas_vinculantes_stf_fts MATCH ?
+        ORDER BY sumulas_vinculantes_stf_fts.rank
+        LIMIT ?
+    """
+    try:
+        cursor = await asyncio.wait_for(
+            conn.execute(sql, (safe_query, top_k)), timeout=_DB_QUERY_TIMEOUT
+        )
+        rows = await asyncio.wait_for(cursor.fetchall(), timeout=_DB_QUERY_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error("FTS5 SVs: timeout após %.1fs.", _DB_QUERY_TIMEOUT)
+        return []
+    logger.info("FTS5 SVs retornou %d resultado(s).", len(rows))
+    return [
+        SumulaVinculanteResult(
+            id=row["id"],
+            numero=row["numero"] or 0,
+            enunciado=row["enunciado"] or "",
             rank=row["rank"],
         )
         for row in rows
