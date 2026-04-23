@@ -17,8 +17,12 @@ from src.api.schemas.query_schema import QueryRequest, QueryResponse, SourceDocu
 from src.database.connection import get_db
 from src.services import rag_service
 from src.api.limiter import limiter
+from src.config.settings import get_settings as _get_settings
 
 logger = logging.getLogger(__name__)
+
+# Limite avaliado no startup — override via RATE_LIMIT_PER_MINUTE no .env
+_RATE_LIMIT = f"{_get_settings().rate_limit_per_minute}/minute"
 router = APIRouter()
 
 # Padrões que indicam tentativa de prompt injection na pergunta
@@ -46,7 +50,7 @@ def _check_injection(question: str) -> None:
         "fundamentada com o LLM local."
     ),
 )
-@limiter.limit("10/minute")
+@limiter.limit(_RATE_LIMIT)
 async def handle_query(
     request: Request,
     payload: QueryRequest,

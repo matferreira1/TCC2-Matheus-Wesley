@@ -184,7 +184,16 @@ def _build_prompt(
     sources: list[search_service.SearchResult],
     sources_teses: list[search_service.TesesResult],
 ) -> str:
-    """Monta o prompt RAG com contexto jurídico e pergunta do usuário."""
+    """Monta o prompt RAG v6 com contexto jurídico e pergunta do usuário.
+
+    v6 — adiciona:
+    - Linha "Efeito:" em cada bloco de documento indicando o peso jurídico
+      da fonte (decisão casuística / precedente qualificado / enunciado persuasivo).
+    - Regra de divergência: quando documentos se contradizem, a LLM deve
+      registrar explicitamente o conflito em vez de sintetizá-los como consenso.
+    - Regra de nota de fontes: encerra a resposta com "Nota sobre as fontes:"
+      descrevendo o tipo e força vinculativa dos documentos utilizados.
+    """
     context_parts: list[str] = []
 
     for i, s in enumerate(sources):
@@ -192,18 +201,23 @@ def _build_prompt(
             _extract_ementa_payload(s.ementa, max_chars=settings.rag_max_ementa_chars)
         )
         context_parts.append(
-            f"[Acórdão STF {i + 1}] {s.numero_processo}\n{payload}"
+            f"[Acórdão STF {i + 1}] {s.numero_processo}\n"
+            f"Efeito: decisão casuística — persuasiva, salvo se firmada com repercussão geral.\n"
+            f"{payload}"
         )
 
     for i, t in enumerate(sources_teses):
         tese_texto = _sanitize_doc_text(t.tese_texto)
         if t.area == "SÚMULAS STJ":
             context_parts.append(
-                f"[Súmula STJ {t.edicao_num}]\n{tese_texto}"
+                f"[Súmula STJ {t.edicao_num}]\n"
+                f"Efeito: enunciado persuasivo — consolidado, mas não vinculante.\n"
+                f"{tese_texto}"
             )
         else:
             context_parts.append(
                 f"[Tese STJ {i + 1}] {t.area} — Ed. {t.edicao_num}: {t.edicao_titulo} (Tese {t.tese_num})\n"
+                f"Efeito: precedente qualificado — deve ser observado por todos os tribunais (art. 927, III, CPC).\n"
                 f"{tese_texto}"
             )
 
@@ -227,6 +241,9 @@ def _build_prompt(
         f"1. Use APENAS as informações dos {fontes_desc} abaixo. Não invente nem extrapole.\n"
         "2. Identifique os temas comuns e SINTETIZE-os em poucos pontos claros.\n"
         "   Não liste cada documento separadamente — agrupe os que tratam do mesmo tema.\n"
+        "   DIVERGÊNCIA: se dois ou mais documentos sustentam entendimentos opostos sobre\n"
+        "   o mesmo ponto, NÃO os sintetize como consenso — registre a divergência:\n"
+        "   'Há divergência entre os documentos: [fonte A] entende X, enquanto [fonte B] entende Y.'\n"
         "3. Após cada ponto, cite TODOS os documentos que o sustentam entre parênteses, separados por ponto e vírgula.\n"
         "   - Acórdão STF: cite SOMENTE o número do processo (ex: HC 263552 AgR), que está na linha\n"
         "     imediatamente após o rótulo [Acórdão STF N]. NUNCA use o rótulo [Acórdão STF N] como citação.\n"
@@ -236,10 +253,17 @@ def _build_prompt(
         "     Exemplo: '(DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3))'\n"
         "   - Súmula STJ: cite como 'Súmula NNN/STJ', usando o número que aparece no rótulo [Súmula STJ NNN].\n"
         "     Exemplo: '(Súmula 528/STJ; Súmula 302/STJ)'\n"
-        "4. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "
+        "4. Encerre a resposta com 'Nota sobre as fontes:' e descreva o peso jurídico\n"
+        "   dos documentos utilizados, com base nas linhas 'Efeito:' de cada fonte:\n"
+        "   - Teses STJ (precedente qualificado) vinculam todos os tribunais (art. 927, III, CPC).\n"
+        "   - Súmulas STJ (enunciado persuasivo) são consolidadas, mas não vinculantes.\n"
+        "   - Acórdãos STF (decisão casuística) são persuasivos, salvo com repercussão geral.\n"
+        "   Se a resposta se basear APENAS em acórdãos casuísticos, avise que o usuário\n"
+        "   deve verificar se há tese consolidada ou súmula antes de usar em peças processuais.\n"
+        "5. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "
         "como resposta única e completa, quando absolutamente nenhum documento contém informação relevante. "
         "NUNCA insira essa frase dentro de uma lista numerada.\n"
-        "5. Responda em português, de forma objetiva e direta.\n\n"
+        "6. Responda em português, de forma objetiva e direta.\n\n"
         f"### Documentos:\n{context}\n\n"
         f"### Pergunta:\n{question}\n\n"
         "### Resposta:"

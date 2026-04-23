@@ -223,10 +223,14 @@
     }
 
     function buildCard(s) {
-      const isTese = s.tipo === 'tese_stj';
-      const excerpt = s.ementa ? s.ementa.slice(0, 260) + (s.ementa.length > 260 ? '…' : '') : '';
+      const isTese   = s.tipo === 'tese_stj';
+      const fullText = s.ementa || '';
+      const truncated = fullText.length > 260;
+      const excerpt   = truncated ? fullText.slice(0, 260) + '…' : fullText;
+
       const div = document.createElement('div');
-      div.className = 'bg-surface border border-border rounded-lg px-4 py-3';
+      div.className = 'bg-surface border border-border rounded-lg px-4 py-3 transition-colors duration-150';
+
       div.innerHTML = `
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <span class="text-[0.7rem] font-medium text-accent uppercase tracking-wider">
@@ -234,8 +238,34 @@
           </span>
           <span class="text-[0.68rem] text-muted truncate max-w-[55%] text-right">${esc(s.numero_processo)}</span>
         </div>
-        <p class="text-xs text-muted leading-relaxed">${esc(excerpt)}</p>
+        <p class="card-body text-xs text-muted leading-relaxed">${esc(excerpt)}</p>
+        ${truncated ? `
+        <button
+          class="toggle-btn mt-2 text-[0.7rem] text-accent/70 hover:text-accent transition-colors duration-150 font-medium"
+          data-full="${esc(fullText)}"
+          data-excerpt="${esc(excerpt)}"
+          data-expanded="false"
+        >
+          Ver na íntegra ↓
+        </button>` : ''}
       `;
+
+      if (truncated) {
+        div.querySelector('.toggle-btn').addEventListener('click', function () {
+          const body     = div.querySelector('.card-body');
+          const expanded = this.dataset.expanded === 'true';
+          if (expanded) {
+            body.textContent       = this.dataset.excerpt;
+            this.textContent       = 'Ver na íntegra ↓';
+            this.dataset.expanded  = 'false';
+          } else {
+            body.textContent       = this.dataset.full;
+            this.textContent       = 'Recolher ↑';
+            this.dataset.expanded  = 'true';
+          }
+        });
+      }
+
       return div;
     }
 

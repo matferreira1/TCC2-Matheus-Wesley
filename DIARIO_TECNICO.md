@@ -1757,4 +1757,467 @@ Durante a implementação, foram identificados e corrigidos 3 bugs no framework 
 - ✅ **Pipeline híbrido** FTS5 + semântica + RRF em produção
 - ✅ **Comparação A/B/C/D** implementada no framework de avaliação
 - ✅ **Groundedness 4.8/5.0** — melhor resultado do projeto até agora
-- ⬜ Reranking cross-encoder (próxima fase)
+- ✅ Reranking cross-encoder — implementado na Fase 13
+
+---
+
+## Fase 13 — Reranking Cross-Encoder (22 de março de 2026)
+
+### 13.1 Motivação
+
+Após o pipeline híbrido (FTS5 + semântica + RRF), os candidatos selecionados pelo RRF ainda carregam ruído: o RRF funde rankings mas não puntua cada par (query, documento) diretamente. O **cross-encoder** resolve isso: recebe a query e o texto do documento concatenados e produz um score de relevância end-to-end, aproveitando a atenção cruzada do transformer.
+
+Comparação conceitual:
+
+| Etapa | Modelo | Complexidade | Precisão |
+|---|---|---|---|
+| FTS5 | BM25 | O(N) | Lexical |
+| Busca semântica | bi-encoder (MiniLM) | O(N) | Semântica (aproximada) |
+| Reranking | cross-encoder | O(k) — k << N | Semântica (exata) |
+
+O cross-encoder é caro por documento, por isso é aplicado apenas sobre os top-20 candidatos do RRF — não sobre o corpus inteiro.
+
+### 13.2 Implementação (`src/services/rerank_service.py`)
+
+**Modelo:** `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`
+- Multilíngue (incluindo português), treinado em MS MARCO multilíngue
+- MiniLM 12 camadas × 384 hidden dims — rápido em CPU para ≤ 30 docs
+- ~120 MB em disco
+
+**Singleton:** o modelo é carregado via `CrossEncoder(MODEL_NAME)` na primeira chamada e mantido em memória (`_model` global) — padrão idêntico ao `semantic_service`.
+
+**Fallback gracioso:** qualquer exceção na carga ou na predição retorna a lista de entrada intacta (ordem RRF preservada), garantindo que o sistema nunca quebra por indisponibilidade do cross-encoder.
+
+**Extração de texto:**
+
+```python
+_MAX_TEXT_CHARS = 512  # MiniLM max ≈ 128 tokens ≈ ~400 chars PT
+
+def _get_text(doc):
+    if isinstance(doc, SearchResult):
+        return doc.ementa[:512]
+    # TesesResult: prefixa com área temática
+    prefix = f"{doc.area}: " if doc.area else ""
+    return (prefix + doc.tese_texto)[:512]
+```
+
+**API pública:**
+
+```python
+def rerank(query: str, docs: list[T], top_n: int | None = None) -> list[T]:
+    pairs = [(query, _get_text(d)) for d in docs]
+    scores = model.predict(pairs).tolist()
+    ranked = sorted(zip(scores, docs), reverse=True)
+    return [d for _, d in ranked][:top_n]
+```
+
+### 13.3 Integração no Pipeline RAG
+
+Em `src/services/rag_service.py`, o reranking é o estágio final após o RRF:
+
+```python
+_FETCH = 15           # candidatos por fonte antes do RRF
+_RRF_CANDIDATES = 20  # candidatos pós-RRF enviados ao cross-encoder
+
+if settings.reranker_enabled:
+    sources = rerank_service.rerank(question, candidates_acordaos, top_n=settings.rag_top_k)
+    sources_teses = rerank_service.rerank(question, candidates_teses, top_n=settings.rag_top_k_teses)
+else:
+    sources = candidates_acordaos[:settings.rag_top_k]
+    sources_teses = candidates_teses[:settings.rag_top_k_teses]
+```
+
+**Nova setting adicionada em `src/config/settings.py`:**
+
+```python
+reranker_enabled: bool = True  # desabilitar para usar só RRF (mais rápido)
+```
+
+### 13.4 Pipeline Completo (após Fase 13)
+
+```
+Pergunta do usuário
+      │
+      ├─── FTS5 (BM25): top-15 acórdãos + top-15 teses  ─┐
+      └─── Semântica (cosine): top-15 acórdãos + teses   ─┘ asyncio.gather
+                        │
+                        ▼
+             RRF (k=60): top-20 candidatos por tipo
+                        │
+                        ▼
+           Cross-Encoder: pontua cada par (query, doc)
+                        │
+                        ▼
+          top-6 acórdãos + top-3 teses → prompt → LLM
+```
+
+### 13.5 Arquivos Criados / Modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/services/rerank_service.py` | **Novo** — cross-encoder singleton, `rerank()`, fallback gracioso |
+| `src/config/settings.py` | `reranker_enabled: bool = True` adicionado |
+| `src/services/rag_service.py` | Etapa de reranking inserida após o RRF; log detalhado por etapa |
+
+### 13.6 Estado Após a Fase 13
+
+- ✅ **Pipeline de 4 estágios:** FTS5 → semântica → RRF → cross-encoder reranking
+- ✅ **`reranker_enabled`** configurável via `.env` (desativar para reduzir latência de CPU)
+- ✅ **Fallback gracioso:** cross-encoder indisponível → ordem RRF preservada, sem exceção
+
+---
+
+## Fase 14 — Endpoint de Health Check (23 de março de 2026)
+
+### 14.1 Motivação
+
+Sem um endpoint de saúde, não há forma programática de verificar se a aplicação está operacional — banco conectado, configuração válida, reranker ativo. Um `GET /api/v1/health` permite monitoramento externo e integração com ferramentas de CI.
+
+### 14.2 Implementação (`src/api/routes/health.py`)
+
+**Schema de resposta:**
+
+```python
+class HealthResponse(BaseModel):
+    status: str            # "ok" | "degraded"
+    uptime_seconds: float  # segundos desde o startup
+    database: str          # "ok" | "unavailable"
+    llm_provider: str      # "groq" | "ollama"
+    reranker_enabled: bool
+```
+
+**Lógica:**
+
+```python
+@router.get("/health", response_model=HealthResponse)
+async def health_check(conn = Depends(get_db)) -> HealthResponse:
+    try:
+        await conn.execute("SELECT 1")
+        db_status = "ok"
+    except Exception:
+        db_status = "unavailable"
+
+    return HealthResponse(
+        status="ok" if db_status == "ok" else "degraded",
+        uptime_seconds=round(time.time() - _START_TIME, 1),
+        database=db_status,
+        llm_provider=settings.llm_provider,
+        reranker_enabled=settings.reranker_enabled,
+    )
+```
+
+`_START_TIME` é capturado no módulo no momento do import — reflete o uptime real da aplicação.
+
+### 14.3 Registro em `main.py`
+
+```python
+from src.api.routes import health as health_router
+app.include_router(health_router.router, prefix="/api/v1", tags=["Health"])
+```
+
+### 14.4 Arquivos Criados / Modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/api/routes/health.py` | **Novo** — router, `HealthResponse`, lógica de verificação |
+| `main.py` | Import e `include_router` do `health_router` |
+
+### 14.5 Estado Após a Fase 14
+
+- ✅ **`GET /api/v1/health`** operacional — banco, provedor LLM e reranker expostos
+- ✅ **`status: "degraded"`** quando banco indisponível — distingue falha parcial de falha total
+- ✅ **`uptime_seconds`** rastreado desde o início do processo
+
+---
+
+## Fase 15 — Expansão de Consulta com Sinônimos Jurídicos (24 de março de 2026)
+
+### 15.1 Motivação
+
+A busca FTS5 com OR entre tokens cobre variação morfológica via `unicode61 remove_diacritics`, mas não cobre **sinonímia jurídica**: o usuário que pesquisa "prisão" não recupera documentos que usam apenas "custódia" ou "detenção". Da mesma forma, siglas como `HC` e `RE` não casam com os termos por extenso.
+
+A **query expansion** resolve o mismatch de vocabulário antes que a consulta chegue ao índice FTS5, sem custo de latência adicional (é uma operação de dicionário — O(termos)).
+
+### 15.2 Implementação (`src/services/query_expansion.py`)
+
+**Estratégia:** dicionário `_SYNONYMS` com ~80 entradas cobrindo 10 grupos temáticos:
+
+| Grupo | Exemplos de chave → sinônimos |
+|---|---|
+| Remédios constitucionais / siglas | `"habeas corpus"` → `{"hc"}`, `"resp"` → `{"recurso", "especial"}` |
+| Direito penal / processual penal | `"prisao"` → `{"custodia", "detencao", "encarceramento"}` |
+| Direito civil / obrigações | `"dano moral"` → `{"indenizacao", "extrapatrimonial", "reparacao"}` |
+| Direito do consumidor | `"plano saude"` → `{"convenio", "operadora", "cobertura"}` |
+| Direito administrativo | `"improbidade"` → `{"corrupcao", "desvio", "ato"}` |
+| Direito tributário | `"icms"` → `{"imposto", "circulacao", "mercadorias"}` |
+| Direito trabalhista | `"horas extras"` → `{"adicional", "sobrejornada", "jornada"}` |
+| Processo / garantias | `"tutela antecipada"` → `{"liminar", "cautelar", "urgencia"}` |
+
+**Lookup normalizado (sem acentos):**
+
+```python
+def expand_query(tokens: list[str]) -> list[str]:
+    norm = [_strip_accents(t) for t in tokens]
+    norm_set = set(norm)
+    extra: set[str] = set()
+    for key, synonyms in _SYNONYMS.items():
+        key_tokens = key.split()
+        if all(t in norm_set for t in key_tokens):
+            extra.update(synonyms)
+    return sorted(extra - norm_set)  # remove tokens já na query
+```
+
+**Exemplo prático:**
+
+```
+query: "habeas corpus" → tokens: ["habeas", "corpus"]
+expand_query(["habeas", "corpus"]) → ["hc"]
+FTS5 query: "habeas OR corpus OR hc"
+```
+
+### 15.3 Integração em `search_service.py`
+
+Adicionado após a tokenização e antes da construção da query FTS5, em **ambas** as funções:
+
+```python
+expanded = expand_query(tokens)
+if expanded:
+    logger.debug("Query expansion: +%d termos: %s", len(expanded), expanded)
+    tokens = tokens + expanded
+safe_query = " OR ".join(tokens)
+```
+
+**Limitação documentada:** tokens de 2 caracteres (ex: `hc`, `re`, `ms`) são filtrados pelo tokenizador (`len(t) > 2`) antes de chegar à função. Portanto essas siglas só funcionam como **sinônimos adicionados** pela expansão, não como chaves de lookup.
+
+### 15.4 Arquivos Criados / Modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/services/query_expansion.py` | **Novo** — `_SYNONYMS`, `_strip_accents()`, `expand_query()` |
+| `src/services/search_service.py` | `expand_query()` chamado em `search()` e `search_teses()` |
+
+### 15.5 Estado Após a Fase 15
+
+- ✅ **~80 mapeamentos jurídicos** cobrindo 10 grupos temáticos
+- ✅ **Integrado em ambas as buscas** FTS5 (acórdãos e teses)
+- ✅ **Zero latência adicional** — lookup de dicionário em memória
+- ✅ **Idempotente:** tokens já presentes na query não são duplicados
+
+---
+
+## Fase 16 — Interface Web (Frontend) (25 de março de 2026)
+
+### 16.1 Motivação
+
+A API REST funcionava apenas via `curl` ou Swagger UI. Para demonstrações do TCC e uso real por advogados, era necessária uma interface visual acessível pelo navegador.
+
+### 16.2 Implementação (`static/index.html`)
+
+**Tecnologias:**
+- **Tailwind CSS** (CDN) — estilização utilitária sem build step
+- **Google Fonts** — `Playfair Display` (serif para o título) + `DM Sans` (sans-serif para corpo)
+- **Vanilla JS** — sem framework, sem dependências de bundle
+
+**Tema visual:**
+
+| Token | Valor | Uso |
+|---|---|---|
+| `bg` | `#111318` | Fundo da página |
+| `surface` | `#1A1D27` | Cards e formulário |
+| `border` | `#2A2E3F` | Bordas |
+| `text` | `#E2E2E8` | Texto principal |
+| `muted` | `#6B7080` | Texto secundário |
+| `accent` | `#4F7CAC` | Botões, logo, links |
+
+**Funcionalidades:**
+- `textarea` com contador de caracteres em tempo real (0/1000)
+- `Ctrl + Enter` para enviar a consulta
+- Modal de loading com animação de dots pulsantes (`dot-pulse`) durante a requisição
+- Resposta renderizada com o texto e lista de fontes (tribunal, número do processo, ementa)
+- Feedback de erro amigável em caso de HTTP 4xx/5xx
+
+**Integração com FastAPI:**
+
+```python
+# main.py
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend() -> FileResponse:
+    return FileResponse("static/index.html")
+```
+
+A rota `GET /` não aparece no Swagger (excluída com `include_in_schema=False`).
+
+### 16.3 Estado Após a Fase 16
+
+- ✅ **Interface acessível em `http://localhost:8000`** sem configuração adicional
+- ✅ **Design dark** com identidade visual consistente (logo de balança, tipografia jurídica)
+- ✅ **UX mínima mas completa:** input, loading, resposta, fontes, erros
+- ✅ **Zero dependências de build:** arquivo único `.html` servido como arquivo estático
+
+---
+
+## Fase 17 — Teste de Carga (Locust)
+
+**Data:** 2026-04-22
+
+### 17.1 Motivação
+
+Para a defesa do TCC, era necessário demonstrar o comportamento do sistema sob carga, validando três aspectos:
+
+1. **Disponibilidade**: o endpoint `/health` mantém latência baixa mesmo com múltiplos clientes simultâneos.
+2. **Throughput real do pipeline RAG**: latência E2E (p50, p95, p99) do `/query` incluindo busca + reranking + LLM.
+3. **Funcionamento do rate limiter**: confirmação de que o mecanismo de proteção retorna 429 corretamente quando o limite é excedido.
+
+A ferramenta escolhida foi **Locust** (`locust>=2.29.0`), por ser:
+- Python (consistente com o stack do projeto)
+- Orientada a usuários virtuais (simula comportamento real)
+- Com geração automática de relatório HTML (p50/p95/p99, gráficos de RPS e latência)
+
+### 17.2 Problema de Rate Limiting em Testes
+
+O decorator `@limiter.limit("10/minute")` em `query.py` era hardcoded. Isso impedia testes de stress reais: todos os usuários Locust compartilham o IP `127.0.0.1`, tornando o limite global para todo o teste (não por usuário virtual).
+
+**Solução:** tornar o rate limit configurável via variável de ambiente.
+
+| Arquivo | Alteração |
+|---|---|
+| `src/config/settings.py` | Adicionado `rate_limit_per_minute: int = 10` |
+| `src/api/routes/query.py` | Limite calculado em `_RATE_LIMIT = f"{get_settings().rate_limit_per_minute}/minute"` no startup |
+
+Assim, para testes de stress basta definir `RATE_LIMIT_PER_MINUTE=200` no `.env` e reiniciar o servidor — sem alteração de código.
+
+### 17.3 Cenários de Teste
+
+O locustfile define três classes de usuários:
+
+| Classe | Endpoint | wait_time | Objetivo |
+|---|---|---|---|
+| `HealthUser` (weight=3) | `GET /health` | 1–3 s | Medir overhead da API sem gargalo de LLM |
+| `QueryUser` (weight=2) | `POST /query` + `/health` | 8–15 s | Pipeline completo com cadência que respeita os 10 req/min por IP |
+| `StressQueryUser` (weight=0) | `POST /query` | 1–3 s | Stress test — ativado com `--tags stress` e rate limit elevado |
+
+O corpus de perguntas contém **20 consultas jurídicas realistas** cobrindo habeas corpus, dano moral, direito tributário, improbidade administrativa, interceptação telefônica e outros temas do STF/STJ.
+
+**Comandos de execução:**
+
+```bash
+# Cenário padrão com interface web:
+locust -f load_tests/locustfile.py --host http://127.0.0.1:8000
+
+# Headless — 2 usuários, 2 minutos, relatório HTML:
+locust -f load_tests/locustfile.py --host http://127.0.0.1:8000 \
+       --headless -u 2 -r 1 -t 120s --html load_tests/report.html
+
+# Stress test (rate limit elevado necessário):
+RATE_LIMIT_PER_MINUTE=200 uvicorn main:app --host 127.0.0.1 --port 8000
+locust -f load_tests/locustfile.py --host http://127.0.0.1:8000 \
+       --headless -u 10 -r 2 -t 60s --html load_tests/report_stress.html \
+       --tags stress
+```
+
+### 17.4 Arquivos Criados ou Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `load_tests/locustfile.py` | Novo — cenários HealthUser, QueryUser e StressQueryUser |
+| `src/config/settings.py` | Adicionado `rate_limit_per_minute: int = 10` |
+| `src/api/routes/query.py` | Rate limit agora lido de `get_settings().rate_limit_per_minute` |
+| `requirements.txt` | Adicionado `locust>=2.29.0` |
+
+### 17.5 Estado Após a Fase 17
+
+- ✅ **Teste de carga implementado** com Locust e corpus de 20 perguntas jurídicas
+- ✅ **Rate limit configurável** via `RATE_LIMIT_PER_MINUTE` no `.env`
+- ✅ **Três cenários documentados**: padrão (respeita limite), stress (requer elevação), health (sem limite)
+- ✅ **Relatório HTML automático** com p50/p95/p99 e gráficos de throughput/latência
+
+---
+
+## Fase 18 — Prompt v6: Divergência e Peso Jurídico das Fontes (22 de abril de 2026)
+
+### 18.1 Motivação
+
+Análise de qualidade do sistema a partir da perspectiva de um advogado identificou dois problemas críticos no prompt v5:
+
+1. **Falsa síntese de consenso**: a regra 2 ("SINTETIZE os temas comuns") fazia a LLM fundir acórdãos com entendimentos opostos como se fossem consenso. Para um advogado, divergência jurisprudencial é informação essencial — citá-la como consenso é um erro material.
+
+2. **Sem comunicação de vinculatividade**: o sistema tratava Teses STJ (precedente qualificado, vinculante via art. 927, III, CPC), Súmulas STJ (persuasivas, não vinculantes) e acórdãos isolados (casuísticos, persuasivos) de forma idêntica. Um advogado precisa saber se está amparado em precedente qualificado ou em decisão isolada antes de usar a resposta em peça processual.
+
+### 18.2 Decisões de Projeto
+
+**Linha "Efeito:" por documento**
+
+Em vez de criar metadados no banco (exigiria migração de schema e atualização do ETL), a informação de peso jurídico foi embutida diretamente no texto do prompt — uma linha `Efeito:` inserida por `_build_prompt()` logo abaixo de cada rótulo de documento:
+
+```
+[Acórdão STF 1] HC 100001
+Efeito: decisão casuística — persuasiva, salvo se firmada com repercussão geral.
+<texto da ementa>
+
+[Tese STJ 1] DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 1)
+Efeito: precedente qualificado — deve ser observado por todos os tribunais (art. 927, III, CPC).
+<texto da tese>
+
+[Súmula STJ 528]
+Efeito: enunciado persuasivo — consolidado, mas não vinculante.
+<texto da súmula>
+```
+
+Essa abordagem:
+- Não altera o schema do banco nem o ETL
+- Não modifica os rótulos `[Acórdão STF N]`, `[Tese STJ N]`, `[Súmula STJ N]` — preserva os testes de citação existentes
+- Coloca a informação de tipo onde a LLM realmente lê: no contexto de cada documento
+
+**Alternativas descartadas:**
+- Campo `efeito_vinculativo` na tabela `jurisprudencia`: exigiria inferir o tipo a partir do número do processo (complexo e propenso a erros sem dados de repercussão geral)
+- Instrução genérica sem âncora no contexto: LLM tenderia a ignorar ou generalizar incorretamente sem ver o "Efeito:" por documento
+
+### 18.3 Mudanças no Prompt
+
+**Regra 2 — adição de sub-instrução de divergência:**
+```
+DIVERGÊNCIA: se dois ou mais documentos sustentam entendimentos opostos sobre
+o mesmo ponto, NÃO os sintetize como consenso — registre a divergência:
+'Há divergência entre os documentos: [fonte A] entende X, enquanto [fonte B] entende Y.'
+```
+
+**Nova Regra 4 — nota de fontes:**
+```
+4. Encerre a resposta com 'Nota sobre as fontes:' e descreva o peso jurídico
+   dos documentos utilizados, com base nas linhas 'Efeito:' de cada fonte:
+   - Teses STJ (precedente qualificado) vinculam todos os tribunais (art. 927, III, CPC).
+   - Súmulas STJ (enunciado persuasivo) são consolidadas, mas não vinculantes.
+   - Acórdãos STF (decisão casuística) são persuasivos, salvo com repercussão geral.
+   Se a resposta se basear APENAS em acórdãos casuísticos, avise que o usuário
+   deve verificar se há tese consolidada ou súmula antes de usar em peças processuais.
+```
+
+As antigas regras 4 e 5 passaram a ser 5 e 6.
+
+### 18.4 Testes Adicionados
+
+Cinco novos testes em `tests/test_rag.py`:
+
+| Teste | O que verifica |
+|---|---|
+| `test_build_prompt_acordao_tem_anotacao_efeito` | Linha "Efeito:" com "casuística" presente no bloco de acórdão |
+| `test_build_prompt_tese_tem_anotacao_efeito_precedente` | Linha "Efeito:" com "precedente qualificado" e "art. 927" no bloco de tese |
+| `test_build_prompt_sumula_tem_anotacao_efeito_persuasivo` | Linha "Efeito:" com "persuasivo" no bloco de súmula |
+| `test_build_prompt_contem_regra_divergencia` | Prompt contém instrução "DIVERGÊNCIA" e "NÃO os sintetize como consenso" |
+| `test_build_prompt_contem_regra_nota_fontes` | Prompt contém instrução "Nota sobre as fontes" |
+
+### 18.5 Arquivos Criados ou Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/rag_service.py` | `_build_prompt()`: linhas "Efeito:" nos blocos de documento; regra de divergência na regra 2; nova regra 4 de nota de fontes; regras antigas 4→5, 5→6; docstring atualizada para v6 |
+| `tests/test_rag.py` | 5 novos testes cobrindo as adições do prompt v6 |
+
+### 18.6 Estado Após a Fase 18
+
+- ✅ **161 testes passando** (0 falhas, 0 skips) — todos os testes existentes preservados
+- ✅ **Divergência jurisprudencial** explicitamente registrada em vez de sintetizada como falso consenso
+- ✅ **Peso vinculativo comunicado** ao usuário ao final de cada resposta via "Nota sobre as fontes:"
+- ✅ **Três tipos de fonte diferenciados** no contexto: casuístico (acórdão), precedente qualificado (tese), persuasivo (súmula)

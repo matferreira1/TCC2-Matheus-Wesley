@@ -9,7 +9,9 @@
       "Bash(python -m eval.run_evaluation variants --questions q01,q02,q04,q06,q09)",
       "Bash(ls -lh /home/mat/trabalhos/tcc/*.pdf)",
       "Bash(pip install:*)",
-      "Bash(python -c \"import main; print\\('main.py OK'\\)\")"
+      "Bash(python -c \"import main; print\\('main.py OK'\\)\")",
+      "Bash(python -m pytest tests/test_rag.py -v)",
+      "Bash(python3 -)"
     ]
   }
 }

@@ -287,6 +287,56 @@ def test_build_prompt_mixed_sources_description() -> None:
 
 
 # ===========================================================================
+# Testes do prompt v6 — divergência e peso jurídico das fontes
+# ===========================================================================
+
+
+def test_build_prompt_acordao_tem_anotacao_efeito() -> None:
+    """Bloco de acórdão STF deve conter linha 'Efeito:' indicando decisão casuística."""
+    prompt = _build_prompt("Pergunta?", [_make_acordao()], [])
+    assert "Efeito:" in prompt
+    assert "casuística" in prompt
+
+
+def test_build_prompt_tese_tem_anotacao_efeito_precedente() -> None:
+    """Bloco de Tese STJ deve conter linha 'Efeito:' indicando precedente qualificado."""
+    prompt = _build_prompt("Pergunta?", [], [_make_tese()])
+    assert "Efeito:" in prompt
+    assert "precedente qualificado" in prompt
+    assert "art. 927" in prompt
+
+
+def test_build_prompt_sumula_tem_anotacao_efeito_persuasivo() -> None:
+    """Bloco de Súmula STJ deve conter linha 'Efeito:' indicando enunciado persuasivo."""
+    sumula = TesesResult(
+        id=1,
+        area="SÚMULAS STJ",
+        edicao_num=528,
+        edicao_titulo="ENUNCIADOS DAS SÚMULAS",
+        tese_num=1,
+        tese_texto="Compete ao juiz federal do local da apreensão da droga.",
+        julgados="",
+        rank=-1.0,
+    )
+    prompt = _build_prompt("Pergunta?", [], [sumula])
+    assert "Efeito:" in prompt
+    assert "persuasivo" in prompt
+
+
+def test_build_prompt_contem_regra_divergencia() -> None:
+    """O prompt deve conter instrução explícita sobre como tratar divergência entre fontes."""
+    prompt = _build_prompt("Pergunta?", [_make_acordao()], [])
+    assert "DIVERGÊNCIA" in prompt or "divergência" in prompt.lower()
+    assert "NÃO os sintetize como consenso" in prompt or "NÃO" in prompt
+
+
+def test_build_prompt_contem_regra_nota_fontes() -> None:
+    """O prompt deve conter instrução para encerrar com 'Nota sobre as fontes:'."""
+    prompt = _build_prompt("Pergunta?", [_make_acordao()], [_make_tese()])
+    assert "Nota sobre as fontes" in prompt
+
+
+# ===========================================================================
 # Testes de _extract_ementa_payload()
 # ===========================================================================
 

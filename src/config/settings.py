@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     reranker_enabled: bool = True   # desabilitar para usar só RRF (mais rápido)
 
     # ------------------------------------------------------------------
+    # Rate limiting
+    # ------------------------------------------------------------------
+    rate_limit_per_minute: int = 10  # aumentar para testes de carga (ex.: 200)
+
+    # ------------------------------------------------------------------
     # Validadores
     # ------------------------------------------------------------------
 
