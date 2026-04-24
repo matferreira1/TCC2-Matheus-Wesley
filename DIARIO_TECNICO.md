@@ -2469,3 +2469,295 @@ Identificado que `_get_text()` em `rerank_service.py` não tratava `SumulaVincul
 - ✅ **Bug corrigido** — `_get_text` agora lida corretamente com os 3 tipos de documento
 - ✅ **Fallback gracioso** — nenhuma fonte passa → retorna lista original
 - ✅ **Sem custo de latência significativo** — cross-encoder já carregado em memória
+
+---
+
+## Fase 24 — Campos orgao_julgador e repercussao_geral (23 de abril de 2026)
+
+### 24.1 Motivação
+
+A tabela `jurisprudencia` só armazenava `tribunal`, `numero_processo`, `ementa` e `data_julgamento`. Os campos `Órgão julgador` (já exportado pelo CSV do STF) e `repercussao_geral` (derivável da ementa) ficavam fora do pipeline, impedindo:
+
+- Uso no prompt: a linha `Efeito:` dizia genericamente "persuasiva, salvo se firmada com repercussão geral" — sem dados reais.
+- Exibição na UI: o card de fonte não mostrava qual turma/pleno decidiu.
+- Granularidade jurídica: acórdãos com RG vinculam todo o Judiciário (art. 927, III, CPC), mas eram tratados da mesma forma que casuísticos.
+
+### 24.2 Detecção de repercussão geral
+
+O CSV do STF não exporta o campo `repercussao_geral` explicitamente. A estratégia adotada: regex `repercuss[aã]o\s+geral` sobre o texto da ementa. Acórdãos com RG quase sempre mencionam "repercussão geral" explicitamente no texto da ementa — a abordagem tem alta precisão para um corpus de jurisprudência STF.
+
+### 24.3 Prompt v8 — Efeito dinâmico
+
+O bloco de acórdão no prompt passou de:
+```
+[Acórdão STF N] <numero_processo>
+Efeito: decisão casuística — persuasiva, salvo se firmada com repercussão geral.
+```
+Para:
+```
+[Acórdão STF N] <numero_processo> | <orgao_julgador>
+Efeito: decisão com repercussão geral — vinculante para os demais órgãos do Poder
+        Judiciário (art. 927, III, CPC).     ← se repercussao_geral = True
+  ou
+Efeito: decisão casuística — persuasiva, não vinculante.  ← caso contrário
+```
+
+### 24.4 Mudanças por Arquivo
+
+| Arquivo | Alteração |
+|---|---|
+| `src/database/connection.py` | Colunas `orgao_julgador TEXT` e `repercussao_geral INTEGER DEFAULT 0` no DDL de `jurisprudencia` |
+| `etl/transform.py` | Extrai `Órgão julgador` do CSV; detecta RG via regex; retorna 5 colunas |
+| `etl/load.py` | CREATE TABLE e INSERT incluem os dois novos campos |
+| `src/services/search_service.py` | `SearchResult` + 2 novos campos; SELECT atualizado |
+| `src/services/semantic_service.py` | SELECT e meta-tupla atualizados; `search_semantic` passa os novos campos |
+| `src/services/rag_service.py` | `_build_prompt()` v8: `Efeito:` dinâmico + `orgao_julgador` no cabeçalho; nota de fontes atualizada |
+| `src/api/schemas/query_schema.py` | `SourceDocument` + `orgao_julgador: str | None` e `repercussao_geral: bool | None` |
+| `src/api/routes/query.py` | Popula os novos campos na construção de `SourceDocument` |
+| `static/index.html` | Badge laranja "RG" para acórdãos com repercussão geral; `orgao_julgador` como subtexto no card |
+| `tests/conftest.py` | DDL atualizado; `_SAMPLE_ACORDAOS` com `orgao_julgador` e `repercussao_geral` (ARE 100003 tem RG = 1) |
+| `tests/test_rag.py` | `_make_acordao()` + novos parâmetros; 3 testes antigos substituídos por 4 mais precisos |
+| `tests/test_rerank.py` | `_acordao()` helper atualizado |
+| `tests/test_etl.py` | `test_transform_output_columns` atualizado para as 5 colunas |
+
+### 24.5 Estado Após a Fase 24
+
+- ✅ **180 testes passando** (0 falhas, 0 skips) — 3 testes novos em `test_rag.py`
+- ✅ **Schema expandido** — `orgao_julgador` e `repercussao_geral` no banco
+- ✅ **ETL atualizado** — recarregar com `python -m etl.load` para persistir os novos campos
+- ✅ **Prompt v8** — `Efeito:` agora reflete o peso jurídico real de cada acórdão
+- ✅ **API** — `SourceDocument` expõe os dois novos campos no JSON de resposta
+- ✅ **Frontend** — badge "RG" laranja e subtexto com órgão julgador no card de fonte
+
+---
+
+## Fase 25 — Direito Previdenciário no Dicionário de Sinônimos (23 de abril de 2026)
+
+### 25.1 Motivação
+
+O dicionário `_SYNONYMS` em `query_expansion.py` cobria 10 áreas (remédios constitucionais, penal, civil, consumidor, administrativo, tributário, trabalhista, processo, SVs), mas não tinha nenhuma entrada de **direito previdenciário** — a área com maior volume de processos no STJ (aposentadoria, benefícios INSS, BPC/LOAS). Consultas como "aposentadoria por invalidez" ou "pensão por morte INSS" não se beneficiavam de nenhuma expansão, reduzindo o recall da busca FTS5.
+
+### 25.2 Termos adicionados
+
+23 novas entradas distribuídas em 4 grupos:
+
+| Grupo | Entradas-chave |
+|---|---|
+| Entidade/regime | `previdencia`, `previdencia social`, `inss`, `rgps`, `seguridade social` |
+| Benefícios | `aposentadoria`, `aposentadoria invalidez`, `aposentadoria especial`, `pensao morte`, `auxilio doenca`, `auxilio acidente`, `auxilio reclusao`, `bpc`, `loas`, `salario maternidade` |
+| Conceitos | `carencia`, `segurado`, `beneficiario`, `incapacidade`, `invalidez` |
+| Gestão | `revisao beneficio`, `tempo contribuicao`, `contribuicao previdenciaria` |
+
+### 25.3 Exemplos de expansão
+
+| Query do usuário (tokens) | Tokens adicionados |
+|---|---|
+| `["inss"]` | previdencia, rgps, beneficio, segurado |
+| `["aposentadoria"]` | beneficio, inss, previdencia, proventos |
+| `["pensao", "morte"]` | beneficio, dependente, obito, inss |
+| `["auxilio", "doenca"]` | incapacidade, temporaria, beneficio, inss |
+| `["bpc"]` | loas, assistencia, idoso, deficiencia, beneficio |
+| `["tempo", "contribuicao"]` | aposentadoria, carencia, previdencia, inss |
+
+### 25.4 Mudanças por Arquivo
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/query_expansion.py` | Bloco "Direito previdenciário" com 23 entradas |
+| `tests/test_query_expansion.py` | 13 novos testes cobrindo as entradas adicionadas |
+
+### 25.5 Estado Após a Fase 25
+
+- ✅ **193 testes passando** (0 falhas, 0 skips) — 13 testes novos em `test_query_expansion.py`
+- ✅ **10 → 11 áreas** cobertas pelo dicionário de sinônimos
+- ✅ **~80 → ~103 entradas** no dicionário `_SYNONYMS`
+
+---
+
+## Fase 26 — Filtro Temporal por data_julgamento (24 de abril de 2026)
+
+### 26.1 Motivação
+
+Usuários que pesquisam jurisprudência recente precisam restringir os resultados a um intervalo de tempo específico (ex.: decisões após a reforma da prisão preventiva em 2023, ou entre dois marcos legislativos). Sem filtro temporal, consultas sobre temas com jurisprudência extensa retornam mistura de decisões antigas e recentes — potencialmente conflitantes — sem possibilidade de isolamento.
+
+A coluna `data_julgamento` já existia na tabela `jurisprudencia` desde a Fase 2, mas nunca era exposta nem utilizada como critério de busca.
+
+### 26.2 Decisões de projeto
+
+| Questão | Decisão | Justificativa |
+|---|---|---|
+| Formato da entrada do usuário | ISO 8601 (`YYYY-MM-DD`) | Padrão universal, validável por regex no Pydantic e por `input[type=date]` no HTML |
+| Formato no banco (`DD/MM/YYYY`) vs. input (`YYYY-MM-DD`) | Conversão inline via `CASE` SQLite | Evita migração do banco e mantém retrocompatibilidade com o ETL existente |
+| Filtro no FTS5 | JOIN `JOIN jurisprudencia j … WHERE date(CASE…)` | A condição é aplicada na fase de recuperação, evitando processar candidatos fora do intervalo |
+| Filtro semântico | Pós-processamento Python sobre o cache em memória | O cache já está carregado; recarregar por faixa de data destruiria a lógica de singleton |
+| Filtro em teses STJ e súmulas | Nenhum | Teses são atemporais (consolidadas por edição); não há campo de data no modelo de dados |
+| Acórdãos sem data quando filtro ativo | Excluídos | Comportamento conservador — dado ausente não pode satisfazer critério temporal |
+| Exposição no response | Campo `data_julgamento` em `SourceDocument` | Sempre exposto para acórdãos; nulo para teses/SVs — permite ao frontend exibir a data |
+
+### 26.3 Implementação
+
+#### SQL (FTS5) — `search_service.search()`
+
+Expressão `_DATE_ISO` converte ambos os formatos armazenados:
+
+```sql
+CASE
+  WHEN j.data_julgamento GLOB '????-??-??'  THEN j.data_julgamento
+  WHEN j.data_julgamento GLOB '??/??/????' 
+    THEN substr(j.data_julgamento,7,4)||'-'||substr(j.data_julgamento,4,2)||'-'||substr(j.data_julgamento,1,2)
+  ELSE NULL
+END
+```
+
+Condições adicionadas dinamicamente ao `WHERE` (sem interpolação de valores — apenas constantes de estrutura):
+
+```sql
+AND date(<_DATE_ISO>) >= date(?)   -- date_from
+AND date(<_DATE_ISO>) <= date(?)   -- date_to
+```
+
+#### Semântica — `semantic_service.search_semantic()`
+
+- Cache expandido: `meta` agora inclui `data_julgamento` como 6.º elemento (índice 5).
+- Após `_top_k_by_cosine()`, loop Python converte cada data com `_parse_br_date()` (suporta `DD/MM/YYYY` e `YYYY-MM-DD`) e descarta candidatos fora do intervalo.
+
+#### Schema — `query_schema.py`
+
+```python
+date_from: str | None = Field(pattern=r'^\d{4}-\d{2}-\d{2}$', ...)
+date_to:   str | None = Field(pattern=r'^\d{4}-\d{2}-\d{2}$', ...)
+```
+
+#### Frontend — `static/index.html`
+
+- `<details id="filter-details">` colapsável com dois `<input type="date">`.
+- `body.date_from` / `body.date_to` incluídos no JSON de requisição apenas quando preenchidos.
+- Cards de acórdão exibem "Julgado em DD/MM/YYYY" quando `data_julgamento` presente.
+
+### 26.4 Mudanças por Arquivo
+
+| Arquivo | Alteração |
+|---|---|
+| `src/api/schemas/query_schema.py` | `date_from`, `date_to` em `QueryRequest`; `data_julgamento` em `SourceDocument` |
+| `src/services/search_service.py` | `data_julgamento` em `SearchResult`; `date_from`/`date_to` em `search()` + SQL dinâmico |
+| `src/services/semantic_service.py` | `_parse_br_date()`; `data_julgamento` no cache; `date_from`/`date_to` em `search_semantic()` |
+| `src/services/rag_service.py` | `date_from`/`date_to` em `answer()`; propagação para `search()` e `search_semantic()` |
+| `src/api/routes/query.py` | Repasse de `date_from`/`date_to` ao `rag_service`; `data_julgamento` no `SourceDocument` |
+| `static/index.html` | Filtro colapsável `<details>` + datas no corpo da requisição + campo "Julgado em" no card |
+
+### 26.5 Estado Após a Fase 26
+
+- ✅ **Filtro temporal** — `date_from` e `date_to` (ISO) filtram acórdãos STF em FTS5 e semântica
+- ✅ **Retrocompatível** — chamadas sem filtro comportam-se exatamente como antes
+- ✅ **Ambos os formatos** — banco pode ter `DD/MM/YYYY` ou `YYYY-MM-DD`; ambos são tratados
+- ✅ **Response expandido** — `data_julgamento` exposto em `SourceDocument` para acórdãos
+- ✅ **UI atualizada** — filtro colapsável no formulário; data exibida nos cards de fonte
+
+---
+
+## Fase 27 — Testes para sources=[] (sem resultados encontrados) (24 de abril de 2026)
+
+### 27.1 Motivação
+
+O cenário `sources=[]` (nenhum documento recuperado pelo pipeline) representa um caminho crítico que precisa de cobertura em todos os três níveis da aplicação: serviço de busca, orquestrador RAG e endpoint HTTP. Antes desta fase, o cenário era exercitado parcialmente por `test_answer_sources_empty_when_no_match` (RAG) e `test_post_query_empty_sources_is_valid` (API), mas sem:
+- cobertura do filtro temporal como causa dos resultados vazios
+- verificação de que `answer` ainda é gerado mesmo com fontes vazias
+- verificação de que `sources_sv` também é vazio
+- validação do formato de `date_from`/`date_to` no schema Pydantic
+- garantia de que `data_julgamento` chegue corretamente ao JSON de resposta
+
+### 27.2 Problema colateral: rate limiter nos testes de API
+
+Ao adicionar mais testes que fazem POST para `/api/v1/query`, o rate limiter acumulava contagem entre funções de teste (singleton em memória, IP `127.0.0.1`). Testes na posição 11+ recebiam 429 antes mesmo de executar o mock. Solução: fixture `reset_rate_limiter` com `autouse=True` que chama `limiter.reset()` antes de cada teste — sem efeito em produção.
+
+### 27.3 Novos testes por arquivo
+
+#### `tests/test_search.py` (+7 testes)
+
+| Teste | O que verifica |
+|---|---|
+| `test_search_result_has_data_julgamento_field` | Campo `data_julgamento` presente e não-vazio nos resultados |
+| `test_search_date_from_future_returns_empty` | `date_from` futuro → `sources=[]` |
+| `test_search_date_to_past_returns_empty` | `date_to` anterior a todos os docs → `sources=[]` |
+| `test_search_date_range_filters_results` | Intervalo [2023-03-01, 2023-04-30] inclui apenas ARE 100003 e RE 100004 |
+| `test_search_date_from_only_excludes_older` | Só `date_from` corta documentos anteriores à data |
+| `test_search_date_to_only_excludes_newer` | Só `date_to` corta documentos posteriores à data |
+| `test_search_without_date_filter_returns_all_matches` | Sem filtro, retorna ao menos tanto quanto com filtro do mesmo período |
+
+#### `tests/test_rag.py` (+4 testes)
+
+| Teste | O que verifica |
+|---|---|
+| `test_answer_all_lists_empty_returns_valid_response` | Todas as fontes vazias → `RagResponse` válido com `sources=sources_teses=sources_sv=[]` |
+| `test_answer_date_filter_forwarded_to_search` | `date_from`/`date_to` chegam exatamente ao `search_service.search` |
+| `test_answer_date_filter_empty_sources_still_generates_answer` | Filtro futuro → `sources=[]` mas `answer` ainda é gerado |
+
+#### `tests/test_api.py` (+8 testes + fixture)
+
+| Teste | O que verifica |
+|---|---|
+| `reset_rate_limiter` (fixture `autouse`) | Zera o limiter antes de cada teste — elimina 429 espúrios |
+| `test_post_query_empty_sources_answer_still_present` | `sources=[]` não impede a geração do campo `answer` |
+| `test_post_query_all_source_lists_empty_returns_200` | Todas as listas de fontes vazias → 200 |
+| `test_post_query_date_from_invalid_format_returns_422` | `date_from` em formato `DD/MM/YYYY` → 422 |
+| `test_post_query_date_to_invalid_format_returns_422` | `date_to` com texto aleatório → 422 |
+| `test_post_query_date_from_only_returns_200` | Só `date_from` → 200 |
+| `test_post_query_date_filter_propagated_to_rag_service` | Valores de `date_from`/`date_to` chegam ao `rag_service.answer` |
+| `test_post_query_source_document_has_data_julgamento_field` | `data_julgamento` presente no JSON de acórdão |
+| `test_post_query_tese_source_data_julgamento_is_null` | `data_julgamento=null` para teses STJ |
+
+### 27.4 Estado Após a Fase 27
+
+- ✅ **211 testes passando** (193 → 211; +18 testes; 0 falhas, 0 skips)
+- ✅ **`sources=[]` coberto** nos três níveis: `search_service`, `rag_service`, endpoint HTTP
+- ✅ **Rate limiter** não interfere mais nos testes de API (fixture `reset_rate_limiter`)
+- ✅ **Filtro temporal** coberto por testes de integração reais (SQLite in-memory + fixture de dados)
+
+---
+
+## Fase 28 — Testes com ementas reais do corpus em _extract_ementa_payload (24 de abril de 2026)
+
+### 28.1 Motivação
+
+Os testes sintéticos de `_extract_ementa_payload` em `test_rag.py` cobriam o comportamento geral (ementa curta, ementa com seções, fallback sem seções), mas usavam textos artificiais que não representavam a formatação real das ementas do STF. O portal do STF produz variações sutis (cabeçalho "Ementa:" com dois-pontos, "EMENTA" maiúsculo sem dois-pontos, numeração dos itens, parênteses em referências de processos) que os textos sintéticos não exercitavam. Um erro no regex de seções ou na lógica de extração poderia passar despercebido pelos testes existentes mas falhar em produção com as 3.420 ementas reais.
+
+### 28.2 Ementas selecionadas do corpus
+
+Quatro ementas selecionadas de `data/db/iajuris.db` para cobrir os casos relevantes:
+
+| Processo | Chars | Estrutura | Caso testado |
+|---|---|---|---|
+| Rcl 87409 AgR-ED | 359 | Sem seções romanas | Ementa curta retornada integralmente |
+| ARE 1513238 AgR | 1681 | 4 seções (I/II/III/IV) | Truncação com max_chars=1500; integridade com max_chars=2000 |
+| ARE 1548255 AgR-segundo | 1920 | 4 seções, seção III extensa | Truncação de ementa mais longa |
+| ARE 1581426 | 1762 | 4 seções, cabeçalho "EMENTA" sem `:` | Variante de cabeçalho sem dois-pontos |
+
+### 28.3 Assertivas por categoria
+
+**Retorno integral** (ementa dentro do limite):
+- `Rcl 87409 AgR-ED` com `max_chars=1500` → `result == ementa` (identidade exata)
+- `ARE 1513238 AgR` com `max_chars=2000` → `result == ementa`
+- Ementa curta não contém `[...]`
+
+**Extração de seções III + IV** (ementa acima do limite):
+- Resultado contém `"III. RAZÕES DE DECIDIR"` e `"IV. DISPOSITIVO"`
+- Resultado NÃO contém `"I. CASO EM EXAME"` nem `"II. QUESTÃO EM DISCUSSÃO"`
+- Texto do dispositivo aparece íntegro (ex: `"6. Agravo interno desprovido."`)
+- Cabeçalho antes da seção I preservado (ex: `"DIREITO PROCESSUAL CIVIL"`)
+- Marcador `"[...]"` presente indicando omissão
+- `len(result) <= max_chars`
+
+**Variante de cabeçalho**:
+- `ARE 1581426` com `"EMENTA"` sem `:` → extração funciona; `"7. Recursos extraordinários com seguimentos negados."` presente
+
+### 28.4 Mudanças por arquivo
+
+| Arquivo | Alteração |
+|---|---|
+| `tests/test_rag.py` | 4 constantes com ementas reais do corpus + 13 testes na seção "ementas reais do corpus STF" |
+
+### 28.5 Estado Após a Fase 28
+
+- ✅ **224 testes passando** (211 → 224; +13 testes; 0 falhas, 0 skips)
+- ✅ **`_extract_ementa_payload` coberto com ementas reais** — 4 processos do corpus, variações de cabeçalho e tamanho
+- ✅ **Regressão detectável** — qualquer alteração no regex de seções ou na lógica de extração que quebre o comportamento real será capturada

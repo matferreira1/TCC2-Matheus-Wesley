@@ -36,10 +36,20 @@ class RagResponse:
     sources_sv: list[search_service.SumulaVinculanteResult] = field(default_factory=list)
 
 
-async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
-    """Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM."""
+async def answer(
+    conn: aiosqlite.Connection,
+    question: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> RagResponse:
+    """
+    Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM.
+
+    ``date_from`` e ``date_to`` (ISO YYYY-MM-DD) filtram acórdãos STF pelo
+    campo ``data_julgamento``. Teses STJ e Súmulas Vinculantes não são filtradas.
+    """
     logger.info("━━━━ Nova consulta RAG ━━━━")
-    logger.info("Pergunta: %s", question)
+    logger.info("Pergunta: %s | date_from=%s | date_to=%s", question, date_from, date_to)
     inicio = time.perf_counter()
 
     # Busca paralela: FTS5 (lexical) + semântica em acórdãos, teses e SVs
@@ -54,10 +64,10 @@ async def answer(conn: aiosqlite.Connection, question: str) -> RagResponse:
         sem_teses,
         sem_sv,
     ) = await asyncio.gather(
-        search_service.search(conn, question, top_k=_FETCH),
+        search_service.search(conn, question, top_k=_FETCH, date_from=date_from, date_to=date_to),
         search_service.search_teses(conn, question, top_k=_FETCH),
         search_service.search_sumulas_vinculantes(conn, question, top_k=_FETCH_SV),
-        semantic_service.search_semantic(conn, question, top_k=_FETCH),
+        semantic_service.search_semantic(conn, question, top_k=_FETCH, date_from=date_from, date_to=date_to),
         semantic_service.search_teses_semantic(conn, question, top_k=_FETCH),
         semantic_service.search_sv_semantic(conn, question, top_k=_FETCH_SV),
     )
@@ -265,9 +275,17 @@ def _build_prompt(
         payload = _sanitize_doc_text(
             _extract_ementa_payload(s.ementa, max_chars=settings.rag_max_ementa_chars)
         )
+        orgao = f" | {s.orgao_julgador}" if s.orgao_julgador else ""
+        if s.repercussao_geral:
+            efeito = (
+                "decisão com repercussão geral — vinculante para os demais órgãos do "
+                "Poder Judiciário (art. 927, III, CPC)."
+            )
+        else:
+            efeito = "decisão casuística — persuasiva, não vinculante."
         context_parts.append(
-            f"[Acórdão STF {i + 1}] {s.numero_processo}\n"
-            f"Efeito: decisão casuística — persuasiva, salvo se firmada com repercussão geral.\n"
+            f"[Acórdão STF {i + 1}] {s.numero_processo}{orgao}\n"
+            f"Efeito: {efeito}\n"
             f"{payload}"
         )
 
@@ -329,7 +347,8 @@ def _build_prompt(
         "     e a administração pública — o precedente de maior hierarquia (art. 103-A CF).\n"
         "   - Teses STJ (precedente qualificado) vinculam todos os tribunais (art. 927, III, CPC).\n"
         "   - Súmulas STJ (enunciado persuasivo) são consolidadas, mas não vinculantes.\n"
-        "   - Acórdãos STF (decisão casuística) são persuasivos, salvo com repercussão geral.\n"
+        "   - Acórdãos STF com repercussão geral vinculam todos os órgãos judiciários (art. 927, III, CPC);\n"
+        "     acórdãos sem repercussão geral são meramente persuasivos.\n"
         "   Se a resposta se basear APENAS em acórdãos casuísticos, avise que o usuário\n"
         "   deve verificar se há tese consolidada ou súmula antes de usar em peças processuais.\n"
         "5. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "

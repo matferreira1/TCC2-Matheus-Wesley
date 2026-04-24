@@ -59,9 +59,16 @@ async def handle_query(
     """Handler principal do endpoint de consulta RAG."""
     request_id = str(uuid.uuid4())[:8]
     _check_injection(payload.question)
-    logger.info("POST /query | id=%s | pergunta='%s'", request_id, payload.question)
+    logger.info(
+        "POST /query | id=%s | pergunta='%s' | date_from=%s | date_to=%s",
+        request_id, payload.question, payload.date_from, payload.date_to,
+    )
     try:
-        resp = await rag_service.answer(conn, payload.question)
+        resp = await rag_service.answer(
+            conn, payload.question,
+            date_from=payload.date_from,
+            date_to=payload.date_to,
+        )
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
@@ -89,6 +96,9 @@ async def handle_query(
             numero_processo=s.numero_processo,
             ementa=s.ementa,
             tipo="acordao",
+            orgao_julgador=s.orgao_julgador or None,
+            repercussao_geral=s.repercussao_geral,
+            data_julgamento=s.data_julgamento or None,
         )
         for s in resp.sources
     ]

@@ -166,3 +166,74 @@ async def test_search_teses_julgados_field_populated(db: aiosqlite.Connection) -
     results = await search_teses(db, "plano saude", top_k=3)
     assert len(results) >= 1
     assert results[0].julgados != ""
+
+
+# ===========================================================================
+# Testes de search() — filtro temporal por data_julgamento
+# ===========================================================================
+
+
+async def test_search_result_has_data_julgamento_field(db: aiosqlite.Connection) -> None:
+    """Resultados de search() devem expor o campo data_julgamento."""
+    results = await search(db, "habeas corpus", top_k=5)
+    assert len(results) >= 1
+    first = results[0]
+    assert hasattr(first, "data_julgamento")
+    assert first.data_julgamento != ""  # fixture preenche a data
+
+
+async def test_search_date_from_future_returns_empty(db: aiosqlite.Connection) -> None:
+    """date_from no futuro deve excluir todos os documentos — sources=[]."""
+    results = await search(db, "habeas corpus", top_k=5, date_from="2030-01-01")
+    assert results == []
+
+
+async def test_search_date_to_past_returns_empty(db: aiosqlite.Connection) -> None:
+    """date_to anterior a todos os documentos deve retornar sources=[]."""
+    results = await search(db, "habeas corpus", top_k=5, date_to="2020-01-01")
+    assert results == []
+
+
+async def test_search_date_range_filters_results(db: aiosqlite.Connection) -> None:
+    """date_from + date_to devem retornar apenas documentos dentro do intervalo."""
+    # Fixture: HC 100001 (2023-01-15), HC 100002 (2023-02-20), ARE 100003 (2023-03-10),
+    #          RE 100004 (2023-04-05), HC 100005 (2023-05-12)
+    # Faixa [2023-03-01, 2023-04-30] → ARE 100003 e RE 100004
+    results = await search(
+        db, "habeas corpus servidor publico recurso",
+        top_k=10, date_from="2023-03-01", date_to="2023-04-30",
+    )
+    numeros = [r.numero_processo for r in results]
+    for numero in numeros:
+        assert numero in {"ARE 100003", "RE 100004"}, (
+            f"Processo {numero} não deveria passar pelo filtro de data"
+        )
+
+
+async def test_search_date_from_only_excludes_older(db: aiosqlite.Connection) -> None:
+    """date_from sozinho deve excluir documentos anteriores à data de corte."""
+    # date_from=2023-05-01 → apenas HC 100005 (2023-05-12)
+    results = await search(db, "habeas corpus", top_k=10, date_from="2023-05-01")
+    assert len(results) >= 1
+    numeros = [r.numero_processo for r in results]
+    assert all(n == "HC 100005" for n in numeros)
+
+
+async def test_search_date_to_only_excludes_newer(db: aiosqlite.Connection) -> None:
+    """date_to sozinho deve excluir documentos posteriores à data de corte."""
+    # date_to=2023-01-31 → apenas HC 100001 (2023-01-15)
+    results = await search(db, "habeas corpus", top_k=10, date_to="2023-01-31")
+    assert len(results) >= 1
+    numeros = [r.numero_processo for r in results]
+    assert all(n == "HC 100001" for n in numeros)
+
+
+async def test_search_without_date_filter_returns_all_matches(db: aiosqlite.Connection) -> None:
+    """Sem filtro de data, search() deve continuar retornando resultados normalmente."""
+    results_no_filter = await search(db, "habeas corpus", top_k=10)
+    results_with_filter = await search(
+        db, "habeas corpus", top_k=10,
+        date_from="2023-01-01", date_to="2023-12-31",
+    )
+    # Sem filtro deve trazer ao menos tantos quanto com filtro (que cobre o mesmo período)
+    assert len(results_no_filter) >= len(results_with_filter)

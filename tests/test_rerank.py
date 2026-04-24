@@ -27,6 +27,8 @@ def _acordao(id: int, ementa: str = "texto de ementa") -> SearchResult:
         tribunal="STF",
         numero_processo=f"HC {id:06d}",
         ementa=ementa,
+        orgao_julgador="Primeira Turma",
+        repercussao_geral=False,
         rank=-1.0,
     )
 

@@ -114,10 +114,12 @@ def test_transform_returns_dataframe() -> None:
 
 
 def test_transform_output_columns() -> None:
-    """transform() deve retornar exatamente as colunas: titulo, ementa, data_julgamento."""
+    """transform() deve retornar exatamente as colunas esperadas."""
     df = _make_df([_BASE_ROW])
     result = transform(df)
-    assert set(result.columns) == {"titulo", "ementa", "data_julgamento"}
+    assert set(result.columns) == {
+        "titulo", "ementa", "data_julgamento", "orgao_julgador", "repercussao_geral"
+    }
 
 
 def test_transform_removes_empty_ementa() -> None:

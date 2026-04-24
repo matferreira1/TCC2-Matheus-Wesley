@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import struct
+from datetime import datetime
 from typing import TypeVar
 
 import aiosqlite
@@ -80,6 +81,24 @@ def _deserialize(blob: bytes) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+def _parse_br_date(s: str):
+    """
+    Converte string de data para ``datetime.date``.
+
+    Aceita dois formatos:
+    - ``DD/MM/YYYY`` (padrão dos CSVs STF)
+    - ``YYYY-MM-DD`` (ISO — usado nos fixtures de teste)
+
+    Retorna ``None`` se a string for inválida ou vazia.
+    """
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
 async def _load_acordao_cache(
     conn: aiosqlite.Connection,
 ) -> tuple[list[int], list[tuple], np.ndarray] | None:
@@ -88,7 +107,7 @@ async def _load_acordao_cache(
         return _acordao_cache
 
     cur = await conn.execute(
-        "SELECT id, tribunal, numero_processo, ementa, embedding "
+        "SELECT id, tribunal, numero_processo, ementa, orgao_julgador, repercussao_geral, data_julgamento, embedding "
         "FROM jurisprudencia WHERE embedding IS NOT NULL"
     )
     rows = await cur.fetchall()
@@ -100,8 +119,9 @@ async def _load_acordao_cache(
         return None
 
     ids = [r[0] for r in rows]
-    meta = [(r[1] or "", r[2] or "", r[3] or "") for r in rows]
-    vectors = np.stack([_deserialize(r[4]) for r in rows])  # (N, 384)
+    # meta: (tribunal, numero_processo, ementa, orgao_julgador, repercussao_geral, data_julgamento)
+    meta = [(r[1] or "", r[2] or "", r[3] or "", r[4] or "", bool(r[5]), r[6] or "") for r in rows]
+    vectors = np.stack([_deserialize(r[7]) for r in rows])  # (N, 384)
 
     _acordao_cache = (ids, meta, vectors)
     logger.info("Cache semântico: %d acórdãos carregados.", len(ids))
@@ -191,8 +211,16 @@ async def search_semantic(
     conn: aiosqlite.Connection,
     query: str,
     top_k: int = 15,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> list[SearchResult]:
-    """Retorna top_k acórdãos por similaridade semântica com a query."""
+    """
+    Retorna top_k acórdãos por similaridade semântica com a query.
+
+    ``date_from`` e ``date_to`` (ISO YYYY-MM-DD) filtram pelo ``data_julgamento``
+    armazenado no cache. Acórdãos sem data válida são excluídos quando algum
+    filtro está ativo.
+    """
     cache = await _load_acordao_cache(conn)
     if cache is None:
         return []
@@ -201,12 +229,31 @@ async def search_semantic(
     query_vec = _embed_query(query)
     top = _top_k_by_cosine(query_vec, vectors, top_k)
 
+    # Filtro temporal — aplicado em Python sobre o cache em memória
+    if date_from or date_to:
+        df_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
+        df_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+        filtered = []
+        for idx, score in top:
+            dj = _parse_br_date(meta[idx][5])
+            if dj is None:
+                continue  # sem data válida → exclui quando filtro ativo
+            if df_from and dj < df_from:
+                continue
+            if df_to and dj > df_to:
+                continue
+            filtered.append((idx, score))
+        top = filtered
+
     return [
         SearchResult(
             id=ids[idx],
             tribunal=meta[idx][0],
             numero_processo=meta[idx][1],
             ementa=meta[idx][2],
+            orgao_julgador=meta[idx][3],
+            repercussao_geral=meta[idx][4],
+            data_julgamento=meta[idx][5],
             rank=-score,  # negativo: convenção do FTS5 (menor rank = mais relevante)
         )
         for idx, score in top

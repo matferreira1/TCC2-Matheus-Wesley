@@ -42,13 +42,15 @@ async def load() -> None:
         await db.execute("DROP TABLE IF EXISTS jurisprudencia")
         await db.execute("""
             CREATE TABLE jurisprudencia (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                tribunal        TEXT NOT NULL,
-                numero_processo TEXT,
-                ementa          TEXT,
-                decisao         TEXT,
-                data_julgamento TEXT,
-                created_at      TEXT DEFAULT (datetime('now'))
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                tribunal          TEXT NOT NULL,
+                numero_processo   TEXT,
+                ementa            TEXT,
+                decisao           TEXT,
+                data_julgamento   TEXT,
+                orgao_julgador    TEXT,
+                repercussao_geral INTEGER DEFAULT 0,
+                created_at        TEXT DEFAULT (datetime('now'))
             )
         """)
         await db.execute("""
@@ -62,11 +64,14 @@ async def load() -> None:
         """)
 
         rows = [
-            ("STF", row.titulo, row.ementa, None, row.data_julgamento)
+            ("STF", row.titulo, row.ementa, None, row.data_julgamento,
+             row.orgao_julgador, int(row.repercussao_geral))
             for row in df.itertuples(index=False)
         ]
         await db.executemany(
-            "INSERT INTO jurisprudencia (tribunal, numero_processo, ementa, decisao, data_julgamento) VALUES (?,?,?,?,?)",
+            "INSERT INTO jurisprudencia "
+            "(tribunal, numero_processo, ementa, decisao, data_julgamento, orgao_julgador, repercussao_geral) "
+            "VALUES (?,?,?,?,?,?,?)",
             rows,
         )
         await db.execute("INSERT INTO jurisprudencia_fts(jurisprudencia_fts) VALUES('rebuild')")

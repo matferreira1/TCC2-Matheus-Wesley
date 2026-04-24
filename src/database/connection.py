@@ -39,14 +39,16 @@ _db: aiosqlite.Connection | None = None
 
 _DDL_JURISPRUDENCIA = f"""
 CREATE TABLE IF NOT EXISTS {settings.db_table_meta} (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    tribunal         TEXT    NOT NULL,
-    numero_processo  TEXT,
-    ementa           TEXT,
-    decisao          TEXT,
-    data_julgamento  TEXT,
-    embedding        BLOB,
-    created_at       TEXT    DEFAULT (datetime('now'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    tribunal          TEXT    NOT NULL,
+    numero_processo   TEXT,
+    ementa            TEXT,
+    decisao           TEXT,
+    data_julgamento   TEXT,
+    orgao_julgador    TEXT,
+    repercussao_geral INTEGER DEFAULT 0,
+    embedding         BLOB,
+    created_at        TEXT    DEFAULT (datetime('now'))
 );
 """
 

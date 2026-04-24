@@ -17,6 +17,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from main import app
+from src.api.limiter import limiter
 from src.database.connection import get_db
 from src.services.rag_service import RagResponse
 from src.services.search_service import SearchResult, TesesResult
@@ -54,8 +55,14 @@ def _make_rag_response(
 
 
 # ---------------------------------------------------------------------------
-# Fixture: cliente HTTP com banco e lifespan mockados
+# Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> None:
+    """Zera o estado do rate limiter antes de cada teste para evitar 429 acidental."""
+    limiter.reset()
 
 
 @pytest_asyncio.fixture
@@ -229,6 +236,165 @@ async def test_post_query_empty_sources_is_valid(api_client: AsyncClient) -> Non
 
     assert resp.status_code == 200
     assert resp.json()["sources"] == []
+
+
+async def test_post_query_empty_sources_answer_still_present(api_client: AsyncClient) -> None:
+    """Mesmo com sources=[], o campo answer deve estar presente e não-vazio na resposta."""
+    with patch(
+        "src.services.rag_service.answer",
+        new_callable=AsyncMock,
+        return_value=RagResponse(
+            answer="Não encontrei informação suficiente nos documentos disponíveis.",
+            sources=[],
+            sources_teses=[],
+        ),
+    ):
+        resp = await api_client.post(
+            "/api/v1/query",
+            json={"question": "Pergunta cujo tema não existe na base de dados?"},
+        )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["answer"] != ""
+    assert body["sources"] == []
+
+
+async def test_post_query_all_source_lists_empty_returns_200(api_client: AsyncClient) -> None:
+    """Quando acórdãos, teses e SVs são todos vazios, a API deve retornar 200."""
+    with patch(
+        "src.services.rag_service.answer",
+        new_callable=AsyncMock,
+        return_value=RagResponse(
+            answer="Não encontrei informação suficiente.",
+            sources=[],
+            sources_teses=[],
+            sources_sv=[],
+        ),
+    ):
+        resp = await api_client.post(
+            "/api/v1/query",
+            json={"question": "Pergunta sobre tema inexistente na jurisprudência?"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sources"] == []
+
+
+# ===========================================================================
+# Testes - filtro temporal (date_from / date_to)
+# ===========================================================================
+
+
+async def test_post_query_date_from_invalid_format_returns_422(api_client: AsyncClient) -> None:
+    """date_from em formato inválido (não YYYY-MM-DD) deve retornar 422."""
+    resp = await api_client.post(
+        "/api/v1/query",
+        json={
+            "question": "Quais os fundamentos para negar habeas corpus?",
+            "date_from": "31/12/2023",  # formato BR — inválido para o schema
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_post_query_date_to_invalid_format_returns_422(api_client: AsyncClient) -> None:
+    """date_to com texto aleatório deve retornar 422."""
+    resp = await api_client.post(
+        "/api/v1/query",
+        json={
+            "question": "Quais os fundamentos para negar habeas corpus?",
+            "date_to": "dezembro-2023",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_post_query_date_from_only_returns_200(api_client: AsyncClient) -> None:
+    """Somente date_from fornecido deve ser aceito e retornar 200."""
+    with patch(
+        "src.services.rag_service.answer",
+        new_callable=AsyncMock,
+        return_value=RagResponse(answer="Resposta com filtro.", sources=[], sources_teses=[]),
+    ):
+        resp = await api_client.post(
+            "/api/v1/query",
+            json={
+                "question": "Quais os fundamentos para negar habeas corpus?",
+                "date_from": "2023-01-01",
+            },
+        )
+    assert resp.status_code == 200
+
+
+async def test_post_query_date_filter_propagated_to_rag_service(api_client: AsyncClient) -> None:
+    """Os valores de date_from e date_to enviados pela API devem chegar ao rag_service.answer."""
+    mock_answer = AsyncMock(
+        return_value=RagResponse(answer="Sem resultados.", sources=[], sources_teses=[])
+    )
+    with patch("src.services.rag_service.answer", mock_answer):
+        await api_client.post(
+            "/api/v1/query",
+            json={
+                "question": "Quais os fundamentos para negar habeas corpus?",
+                "date_from": "2022-01-01",
+                "date_to": "2023-12-31",
+            },
+        )
+
+    _, kwargs = mock_answer.call_args
+    assert kwargs.get("date_from") == "2022-01-01"
+    assert kwargs.get("date_to") == "2023-12-31"
+
+
+async def test_post_query_source_document_has_data_julgamento_field(api_client: AsyncClient) -> None:
+    """Cada SourceDocument de acórdão deve expor o campo data_julgamento na resposta JSON."""
+    result_with_date = _make_search_result(numero="HC 100001", ementa="Habeas corpus.")
+    result_with_date.data_julgamento = "15/03/2023"
+
+    with patch(
+        "src.services.rag_service.answer",
+        new_callable=AsyncMock,
+        return_value=RagResponse(
+            answer="Resposta juridica.",
+            sources=[result_with_date],
+            sources_teses=[],
+        ),
+    ):
+        resp = await api_client.post(
+            "/api/v1/query",
+            json={"question": "Quais os fundamentos para negar habeas corpus?"},
+        )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert len(body["sources"]) == 1
+    assert "data_julgamento" in body["sources"][0]
+    assert body["sources"][0]["data_julgamento"] == "15/03/2023"
+
+
+async def test_post_query_tese_source_data_julgamento_is_null(api_client: AsyncClient) -> None:
+    """SourceDocument de tese STJ deve ter data_julgamento=null (campo não existe para teses)."""
+    with patch(
+        "src.services.rag_service.answer",
+        new_callable=AsyncMock,
+        return_value=RagResponse(
+            answer="Resposta com tese.",
+            sources=[],
+            sources_teses=[_make_tese_result()],
+        ),
+    ):
+        resp = await api_client.post(
+            "/api/v1/query",
+            json={"question": "Quais os fundamentos para negar habeas corpus?"},
+        )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    teses = [s for s in body["sources"] if s["tipo"] == "tese_stj"]
+    assert len(teses) == 1
+    assert teses[0].get("data_julgamento") is None
 
 
 # ===========================================================================

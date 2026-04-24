@@ -24,6 +24,9 @@ class SearchResult:
     numero_processo: str
     ementa: str
     rank: float
+    orgao_julgador: str = ""
+    repercussao_geral: bool = False
+    data_julgamento: str = ""
 
 
 @dataclass
@@ -54,9 +57,14 @@ async def search(
     conn: aiosqlite.Connection,
     query: str,
     top_k: int = 5,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> list[SearchResult]:
     """
     Busca os ``top_k`` fragmentos mais relevantes para ``query`` via BM25.
+
+    ``date_from`` e ``date_to`` são datas no formato ISO (YYYY-MM-DD) e filtram
+    acórdãos pelo campo ``data_julgamento`` (armazenado como DD/MM/YYYY ou YYYY-MM-DD).
 
     Retorna lista vazia se ``query`` for vazia.
     """
@@ -84,19 +92,44 @@ async def search(
         logger.debug("Query expansion acórdãos: +%d termos: %s", len(expanded), expanded)
         tokens = tokens + expanded
     safe_query = " OR ".join(tokens)  # OR para maximizar recall em buscas por linguagem natural
-    logger.info("FTS5 query: '%s' | top_k=%d", safe_query, top_k)
+    logger.info("FTS5 query: '%s' | top_k=%d | date_from=%s | date_to=%s", safe_query, top_k, date_from, date_to)
 
-    sql = """
-        SELECT j.id, j.tribunal, j.numero_processo, j.ementa, jurisprudencia_fts.rank
+    # Converte data_julgamento para ISO independente do formato armazenado (DD/MM/YYYY ou YYYY-MM-DD)
+    _DATE_ISO = (
+        "CASE "
+        "WHEN j.data_julgamento GLOB '????-??-??'"
+        " THEN j.data_julgamento "
+        "WHEN j.data_julgamento GLOB '??/??/????'"
+        " THEN substr(j.data_julgamento,7,4)||'-'||substr(j.data_julgamento,4,2)||'-'||substr(j.data_julgamento,1,2)"
+        " ELSE NULL END"
+    )
+
+    conditions = ["jurisprudencia_fts MATCH ?"]
+    params: list = [safe_query]
+
+    if date_from:
+        conditions.append(f"date({_DATE_ISO}) >= date(?)")
+        params.append(date_from)
+    if date_to:
+        conditions.append(f"date({_DATE_ISO}) <= date(?)")
+        params.append(date_to)
+
+    where = " AND ".join(conditions)
+    sql = f"""
+        SELECT j.id, j.tribunal, j.numero_processo, j.ementa,
+               j.orgao_julgador, j.repercussao_geral, j.data_julgamento,
+               jurisprudencia_fts.rank
         FROM jurisprudencia_fts
         JOIN jurisprudencia j ON j.id = jurisprudencia_fts.rowid
-        WHERE jurisprudencia_fts MATCH ?
+        WHERE {where}
         ORDER BY jurisprudencia_fts.rank
         LIMIT ?
     """
+    params.append(top_k)
+
     try:
         cursor = await asyncio.wait_for(
-            conn.execute(sql, (safe_query, top_k)), timeout=_DB_QUERY_TIMEOUT
+            conn.execute(sql, params), timeout=_DB_QUERY_TIMEOUT
         )
         rows = await asyncio.wait_for(cursor.fetchall(), timeout=_DB_QUERY_TIMEOUT)
     except asyncio.TimeoutError:
@@ -109,6 +142,9 @@ async def search(
             tribunal=row["tribunal"],
             numero_processo=row["numero_processo"] or "",
             ementa=row["ementa"] or "",
+            orgao_julgador=row["orgao_julgador"] or "",
+            repercussao_geral=bool(row["repercussao_geral"]),
+            data_julgamento=row["data_julgamento"] or "",
             rank=row["rank"],
         )
         for row in rows

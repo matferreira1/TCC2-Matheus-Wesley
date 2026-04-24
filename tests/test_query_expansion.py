@@ -220,3 +220,93 @@ def test_multiple_keys_triggered() -> None:
     # De "dano": prejuizo, lesao, indenizacao (já presente)
     assert "extrapatrimonial" in result
     assert "ressarcimento" in result
+
+
+# ===========================================================================
+# expand_query — Direito previdenciário
+# ===========================================================================
+
+
+def test_expand_inss_adds_previdencia_e_beneficio() -> None:
+    result = expand_query(["inss"])
+    assert "previdencia" in result
+    assert "beneficio" in result
+    assert "segurado" in result
+
+
+def test_expand_aposentadoria_adds_inss_e_beneficio() -> None:
+    result = expand_query(["aposentadoria"])
+    assert "inss" in result
+    assert "beneficio" in result
+    assert "previdencia" in result
+
+
+def test_expand_aposentadoria_invalidez() -> None:
+    result = expand_query(["aposentadoria", "invalidez"])
+    assert "incapacidade" in result
+    assert "permanente" in result
+    assert "inss" in result
+
+
+def test_expand_pensao_morte() -> None:
+    result = expand_query(["pensao", "morte"])
+    assert "dependente" in result
+    assert "obito" in result
+    assert "inss" in result
+
+
+def test_expand_auxilio_doenca() -> None:
+    result = expand_query(["auxilio", "doenca"])
+    assert "incapacidade" in result
+    assert "temporaria" in result
+    assert "beneficio" in result
+
+
+def test_expand_bpc_adds_loas_e_assistencia() -> None:
+    result = expand_query(["bpc"])
+    assert "loas" in result
+    assert "assistencia" in result
+    assert "beneficio" in result
+
+
+def test_expand_loas_adds_bpc() -> None:
+    result = expand_query(["loas"])
+    assert "bpc" in result
+    assert "beneficio" in result
+
+
+def test_expand_carencia_adds_contribuicao() -> None:
+    result = expand_query(["carencia"])
+    assert "contribuicao" in result
+    assert "inss" in result
+
+
+def test_expand_segurado_adds_inss_e_beneficiario() -> None:
+    result = expand_query(["segurado"])
+    assert "inss" in result
+    assert "beneficiario" in result
+
+
+def test_expand_invalidez_adds_incapacidade() -> None:
+    result = expand_query(["invalidez"])
+    assert "incapacidade" in result
+    assert "aposentadoria" in result
+
+
+def test_expand_tempo_contribuicao() -> None:
+    result = expand_query(["tempo", "contribuicao"])
+    assert "aposentadoria" in result
+    assert "carencia" in result
+    assert "inss" in result
+
+
+def test_expand_previdencia_social() -> None:
+    result = expand_query(["previdencia", "social"])
+    assert "inss" in result
+    assert "aposentadoria" in result
+
+
+def test_expand_seguridade_social() -> None:
+    result = expand_query(["seguridade", "social"])
+    assert "previdencia" in result
+    assert "inss" in result

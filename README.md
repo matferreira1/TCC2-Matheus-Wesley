@@ -208,6 +208,17 @@ curl -X POST http://localhost:8000/api/v1/query \
   -d '{"question": "Quais os fundamentos para negar seguimento a um habeas corpus?"}'
 ```
 
+**Requisição com filtro temporal (acórdãos STF):**
+```bash
+curl -X POST http://localhost:8000/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Quais os fundamentos para negar seguimento a um habeas corpus?",
+    "date_from": "2023-01-01",
+    "date_to":   "2024-12-31"
+  }'
+```
+
 **Resposta:**
 ```json
 {
@@ -217,21 +228,27 @@ curl -X POST http://localhost:8000/api/v1/query \
       "tribunal": "STF",
       "numero_processo": "HC 265065 AgR",
       "ementa": "HABEAS CORPUS. AGRAVO INTERNO...",
-      "tipo": "acordao"
+      "tipo": "acordao",
+      "data_julgamento": "15/03/2023"
     },
     {
       "tribunal": "STJ",
       "numero_processo": "Ed. 39 — Tese 3",
       "ementa": "O habeas corpus não pode ser utilizado como sucedâneo de recurso ordinário...",
-      "tipo": "tese_stj"
+      "tipo": "tese_stj",
+      "data_julgamento": null
     }
   ]
 }
 ```
 
-**Validações:**
-- Campo `question` obrigatório
-- Mínimo de 10 caracteres, máximo de 1.000
+**Campos do body:**
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `question` | string | Sim | Pergunta jurídica (10–1.000 caracteres) |
+| `date_from` | string (YYYY-MM-DD) | Não | Início do filtro temporal — aplica-se apenas a acórdãos STF |
+| `date_to` | string (YYYY-MM-DD) | Não | Fim do filtro temporal — aplica-se apenas a acórdãos STF |
 
 **Documentação interativa:** `http://localhost:8000/docs`
 
@@ -250,7 +267,7 @@ curl -X POST http://localhost:8000/api/v1/query \
 .venv/bin/python -m pytest tests/ --tb=short
 ```
 
-A suite possui **177 testes** cobrindo todos os módulos (ETL, busca, RAG, LLM, API, métricas, reranking). Todos os testes utilizam banco SQLite `:memory:` e mocks de LLM — nenhuma conexão de rede real é necessária para executá-los.
+A suite possui **224 testes** cobrindo todos os módulos (ETL, busca, RAG, LLM, API, métricas, reranking). Todos os testes utilizam banco SQLite `:memory:` e mocks de LLM — nenhuma conexão de rede real é necessária para executá-los.
 
 ### Testes de carga (Locust)
 

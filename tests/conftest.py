@@ -17,14 +17,16 @@ import aiosqlite
 
 _DDL_JURISPRUDENCIA = """
 CREATE TABLE IF NOT EXISTS jurisprudencia (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    tribunal         TEXT    NOT NULL,
-    numero_processo  TEXT,
-    ementa           TEXT,
-    decisao          TEXT,
-    data_julgamento  TEXT,
-    embedding        BLOB,
-    created_at       TEXT    DEFAULT (datetime('now'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    tribunal          TEXT    NOT NULL,
+    numero_processo   TEXT,
+    ementa            TEXT,
+    decisao           TEXT,
+    data_julgamento   TEXT,
+    orgao_julgador    TEXT,
+    repercussao_geral INTEGER DEFAULT 0,
+    embedding         BLOB,
+    created_at        TEXT    DEFAULT (datetime('now'))
 );
 """
 
@@ -165,6 +167,7 @@ CREATE TRIGGER IF NOT EXISTS sv_stf_au
 # ---------------------------------------------------------------------------
 
 _SAMPLE_ACORDAOS = [
+    # (tribunal, numero_processo, ementa, decisao, data_julgamento, orgao_julgador, repercussao_geral)
     (
         "STF",
         "HC 100001",
@@ -174,6 +177,8 @@ _SAMPLE_ACORDAOS = [
         "IV. DISPOSITIVO: Ordem concedida.",
         "",
         "2023-01-15",
+        "Primeira Turma",
+        0,
     ),
     (
         "STF",
@@ -184,16 +189,20 @@ _SAMPLE_ACORDAOS = [
         "IV. DISPOSITIVO: Ordem denegada.",
         "",
         "2023-02-20",
+        "Segunda Turma",
+        0,
     ),
     (
         "STF",
         "ARE 100003",
-        "Recurso extraordinário. Repercussão geral não reconhecida. "
+        "Recurso extraordinário. Repercussão geral reconhecida. "
         "Direito constitucional. Liberdade de expressão. "
-        "III. RAZÕES DE DECIDIR: Ausência de questão constitucional. "
-        "IV. DISPOSITIVO: Recurso não admitido.",
+        "III. RAZÕES DE DECIDIR: Presença de questão constitucional com repercussão geral. "
+        "IV. DISPOSITIVO: Recurso admitido.",
         "",
         "2023-03-10",
+        "Tribunal Pleno",
+        1,
     ),
     (
         "STF",
@@ -204,6 +213,8 @@ _SAMPLE_ACORDAOS = [
         "IV. DISPOSITIVO: Recurso provido.",
         "",
         "2023-04-05",
+        "Tribunal Pleno",
+        0,
     ),
     (
         "STF",
@@ -215,6 +226,8 @@ _SAMPLE_ACORDAOS = [
         "IV. DISPOSITIVO: HC não conhecido.",
         "",
         "2023-05-12",
+        "Segunda Turma",
+        0,
     ),
 ]
 
@@ -298,8 +311,9 @@ async def db() -> aiosqlite.Connection:
 
         # Dados de acórdãos (trigger popula jurisprudencia_fts automaticamente)
         await conn.executemany(
-            "INSERT INTO jurisprudencia (tribunal, numero_processo, ementa, decisao, data_julgamento) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO jurisprudencia "
+            "(tribunal, numero_processo, ementa, decisao, data_julgamento, orgao_julgador, repercussao_geral) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             _SAMPLE_ACORDAOS,
         )
 
