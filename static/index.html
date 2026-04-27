@@ -100,7 +100,6 @@
         <strong class="font-medium text-amber-600/90">Aviso legal:</strong>
         Este sistema é uma ferramenta de pesquisa acadêmica sobre jurisprudência brasileira.
         As respostas geradas por IA podem conter imprecisões e <strong class="font-medium">não constituem aconselhamento jurídico</strong>.
-        Para orientação sobre caso específico, consulte um advogado habilitado na OAB.
       </p>
     </aside>
 
@@ -117,39 +116,6 @@
         ></textarea>
         <span id="count" class="absolute bottom-3 right-3 text-xs text-muted/50 pointer-events-none">0/1000</span>
       </div>
-
-      <!-- Filtro temporal -->
-      <details id="filter-details" class="mb-3 group">
-        <summary class="cursor-pointer text-xs text-muted/60 hover:text-muted transition-colors duration-150 select-none flex items-center gap-1.5 w-fit">
-          <svg class="transition-transform duration-200 group-open:rotate-90" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-            <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Filtrar por período (acórdãos STF)
-        </summary>
-        <div class="mt-2 flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-2">
-            <label for="date-from" class="text-xs text-muted/70 whitespace-nowrap">De</label>
-            <input
-              type="date"
-              id="date-from"
-              class="bg-surface border border-border text-text text-xs rounded-md px-2.5 py-1.5 focus:border-accent focus:outline-none transition-colors duration-200 [color-scheme:dark]"
-            >
-          </div>
-          <div class="flex items-center gap-2">
-            <label for="date-to" class="text-xs text-muted/70 whitespace-nowrap">Até</label>
-            <input
-              type="date"
-              id="date-to"
-              class="bg-surface border border-border text-text text-xs rounded-md px-2.5 py-1.5 focus:border-accent focus:outline-none transition-colors duration-200 [color-scheme:dark]"
-            >
-          </div>
-          <button
-            type="button"
-            onclick="clearDates()"
-            class="text-[0.65rem] text-muted/50 hover:text-muted transition-colors duration-150"
-          >limpar</button>
-        </div>
-      </details>
 
       <div class="flex items-center justify-between">
         <span class="text-xs text-muted/60 font-light">Ctrl + Enter para enviar</span>
@@ -233,10 +199,6 @@
 
       try {
         const body = { question: q };
-        const df = $('date-from').value;
-        const dt = $('date-to').value;
-        if (df) body.date_from = df;
-        if (dt) body.date_to   = dt;
 
         const res = await fetch('/api/v1/query', {
           method: 'POST',
@@ -284,28 +246,27 @@
         const m = n.match(/(\d+)/);
         const num = m ? m[1] : '';
         return {
-          href: 'https://portal.stf.jus.br/jurisprudencia/sumariosumula.asp?base=26&sumula=' + num,
+          href: 'https://jurisprudencia.stf.jus.br/pages/search?base=baseSumulasVinculantes&pesquisa=SV+' + num,
           label: 'STF · Súmula Vinculante ' + num,
         };
       }
       if (tipo === 'tese_stj') {
-        return { href: 'https://scon.stj.jus.br/SCON/jt/', label: 'STJ · Jurisprudência em Teses' };
+        return { href: 'https://processo.stj.jus.br/SCON/jt/', label: 'STJ · Jurisprudência em Teses' };
       }
       if (t === 'STF') {
-        const m = n.match(/^([A-Za-z]+)\s+(\d+)/);
-        if (m) {
+        if (n) {
           return {
-            href: 'https://portal.stf.jus.br/processos/listarProcessos.asp'
-                  + '?classe=' + encodeURIComponent(m[1])
-                  + '&numeroProcesso=' + m[2],
-            label: 'Portal STF · página do processo',
+            href: 'https://jurisprudencia.stf.jus.br/pages/search?classeNumeroIncidente='
+                  + encodeURIComponent('"' + n + '"')
+                  + '&base=acordaos&sinonimo=true&plural=true&page=1&pageSize=10&sort=_score&sortBy=desc&isAdvanced=true',
+            label: 'STF · Jurisprudência',
           };
         }
-        return { href: 'https://portal.stf.jus.br/jurisprudencia/', label: 'Portal STF' };
+        return { href: 'https://jurisprudencia.stf.jus.br/pages/search', label: 'STF · Jurisprudência' };
       }
       if (t === 'STJ') {
         return {
-          href: 'https://scon.stj.jus.br/SCON/pesquisar.jsp?b=ACOR&livre=' + encodeURIComponent(n),
+          href: 'https://processo.stj.jus.br/SCON/pesquisar.jsp?b=ACOR&livre=' + encodeURIComponent(n),
           label: 'STJ · SCON busca',
         };
       }
@@ -392,11 +353,6 @@
       inp.value = ''; $('count').textContent = '0/1000'; inp.style.height = '';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       inp.focus();
-    }
-
-    function clearDates() {
-      $('date-from').value = '';
-      $('date-to').value   = '';
     }
 
     function loading(on) {

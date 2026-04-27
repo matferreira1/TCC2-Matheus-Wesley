@@ -184,80 +184,6 @@ async def test_answer_all_lists_empty_returns_valid_response(db: aiosqlite.Conne
     assert result.answer != ""
 
 
-async def test_answer_date_filter_forwarded_to_search(db: aiosqlite.Connection) -> None:
-    """date_from e date_to devem ser repassados exatamente para search_service.search."""
-    mock_search = AsyncMock(return_value=[])
-
-    with (
-        patch("src.services.rag_service.search_service.search", mock_search),
-        patch("src.services.rag_service.search_service.search_teses",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.search_service.search_sumulas_vinculantes",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_teses_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_sv_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.settings") as mock_settings,
-        patch("src.services.rag_service.groq_service.generate",
-              new_callable=AsyncMock, return_value="Sem resultados."),
-    ):
-        mock_settings.rag_top_k = 5
-        mock_settings.rag_top_k_teses = 3
-        mock_settings.rag_max_ementa_chars = 1500
-        mock_settings.llm_provider = "groq"
-        mock_settings.reranker_enabled = False
-
-        await answer(
-            db,
-            "Quais os fundamentos para negar habeas corpus?",
-            date_from="2023-01-01",
-            date_to="2023-06-30",
-        )
-
-    _, kwargs = mock_search.call_args
-    assert kwargs.get("date_from") == "2023-01-01"
-    assert kwargs.get("date_to") == "2023-06-30"
-
-
-async def test_answer_date_filter_empty_sources_still_generates_answer(db: aiosqlite.Connection) -> None:
-    """Com filtro de data que exclui tudo, o pipeline deve gerar resposta e retornar sources=[]."""
-    with (
-        patch("src.services.rag_service.search_service.search",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.search_service.search_teses",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.search_service.search_sumulas_vinculantes",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_teses_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.semantic_service.search_sv_semantic",
-              new_callable=AsyncMock, return_value=[]),
-        patch("src.services.rag_service.settings") as mock_settings,
-        patch("src.services.rag_service.groq_service.generate",
-              new_callable=AsyncMock,
-              return_value="Não encontrei informação suficiente nos documentos disponíveis."),
-    ):
-        mock_settings.rag_top_k = 5
-        mock_settings.rag_top_k_teses = 3
-        mock_settings.rag_max_ementa_chars = 1500
-        mock_settings.llm_provider = "groq"
-        mock_settings.reranker_enabled = False
-
-        result = await answer(
-            db,
-            "Quais os fundamentos para negar habeas corpus?",
-            date_from="2030-01-01",  # futuro — nenhum acórdão passa
-        )
-
-    assert result.sources == []
-    assert result.sources_teses == []
-    assert result.sources_sv == []
-    assert "Não encontrei" in result.answer
 
 
 async def test_answer_propagates_llm_error(db: aiosqlite.Connection) -> None:
@@ -478,10 +404,10 @@ def test_build_prompt_contem_regra_divergencia() -> None:
     assert "NÃO os sintetize como consenso" in prompt or "NÃO" in prompt
 
 
-def test_build_prompt_contem_regra_nota_fontes() -> None:
-    """O prompt deve conter instrução para encerrar com 'Nota sobre as fontes:'."""
+def test_build_prompt_contem_regra_citacao() -> None:
+    """O prompt deve conter instrução de citação de fontes."""
     prompt = _build_prompt("Pergunta?", [_make_acordao()], [_make_tese()])
-    assert "Nota sobre as fontes" in prompt
+    assert "cite" in prompt.lower()
 
 
 # ===========================================================================
@@ -784,11 +710,11 @@ def test_build_prompt_sv_regra_citacao_presente() -> None:
     assert "SV N/STF" in prompt or "SV 11/STF" in prompt or "SV" in prompt
 
 
-def test_build_prompt_sv_nota_fontes_menciona_hierarquia_maxima() -> None:
-    """Nota sobre as fontes deve incluir referência à hierarquia máxima das SVs."""
+def test_build_prompt_sv_efeito_vinculante_no_contexto() -> None:
+    """A linha Efeito: da SV no contexto deve mencionar 'vinculante constitucional' e art. 103-A."""
     prompt = _build_prompt("pergunta", [], [], [_make_sv()])
-    assert "Nota sobre as fontes:" in prompt
-    assert "art. 103-A" in prompt
+    assert "vinculante constitucional" in prompt
+    assert "103-A" in prompt
 
 
 def test_build_prompt_sv_fontes_desc_inclui_sumulas_vinculantes() -> None:

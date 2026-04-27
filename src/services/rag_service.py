@@ -39,17 +39,10 @@ class RagResponse:
 async def answer(
     conn: aiosqlite.Connection,
     question: str,
-    date_from: str | None = None,
-    date_to: str | None = None,
 ) -> RagResponse:
-    """
-    Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM.
-
-    ``date_from`` e ``date_to`` (ISO YYYY-MM-DD) filtram acórdãos STF pelo
-    campo ``data_julgamento``. Teses STJ e Súmulas Vinculantes não são filtradas.
-    """
+    """Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM."""
     logger.info("━━━━ Nova consulta RAG ━━━━")
-    logger.info("Pergunta: %s | date_from=%s | date_to=%s", question, date_from, date_to)
+    logger.info("Pergunta: %s", question)
     inicio = time.perf_counter()
 
     # Busca paralela: FTS5 (lexical) + semântica em acórdãos, teses e SVs
@@ -64,10 +57,10 @@ async def answer(
         sem_teses,
         sem_sv,
     ) = await asyncio.gather(
-        search_service.search(conn, question, top_k=_FETCH, date_from=date_from, date_to=date_to),
+        search_service.search(conn, question, top_k=_FETCH),
         search_service.search_teses(conn, question, top_k=_FETCH),
         search_service.search_sumulas_vinculantes(conn, question, top_k=_FETCH_SV),
-        semantic_service.search_semantic(conn, question, top_k=_FETCH, date_from=date_from, date_to=date_to),
+        semantic_service.search_semantic(conn, question, top_k=_FETCH),
         semantic_service.search_teses_semantic(conn, question, top_k=_FETCH),
         semantic_service.search_sv_semantic(conn, question, top_k=_FETCH_SV),
     )
@@ -341,20 +334,10 @@ def _build_prompt(
         "     Exemplo: '(DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3))'\n"
         "   - Súmula STJ: cite como 'Súmula NNN/STJ', usando o número que aparece no rótulo [Súmula STJ NNN].\n"
         "     Exemplo: '(Súmula 528/STJ; Súmula 302/STJ)'\n"
-        "4. Encerre a resposta com 'Nota sobre as fontes:' e descreva o peso jurídico\n"
-        "   dos documentos utilizados, com base nas linhas 'Efeito:' de cada fonte:\n"
-        "   - Súmulas Vinculantes STF (vinculante constitucional) são obrigatórias para todo o Judiciário\n"
-        "     e a administração pública — o precedente de maior hierarquia (art. 103-A CF).\n"
-        "   - Teses STJ (precedente qualificado) vinculam todos os tribunais (art. 927, III, CPC).\n"
-        "   - Súmulas STJ (enunciado persuasivo) são consolidadas, mas não vinculantes.\n"
-        "   - Acórdãos STF com repercussão geral vinculam todos os órgãos judiciários (art. 927, III, CPC);\n"
-        "     acórdãos sem repercussão geral são meramente persuasivos.\n"
-        "   Se a resposta se basear APENAS em acórdãos casuísticos, avise que o usuário\n"
-        "   deve verificar se há tese consolidada ou súmula antes de usar em peças processuais.\n"
-        "5. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "
+        "4. A frase 'Não encontrei informação suficiente nos documentos disponíveis.' deve ser usada SOMENTE "
         "como resposta única e completa, quando absolutamente nenhum documento contém informação relevante. "
         "NUNCA insira essa frase dentro de uma lista numerada.\n"
-        "6. Responda em português, de forma objetiva e direta.\n\n"
+        "5. Responda em português, de forma objetiva e direta.\n\n"
         f"### Documentos:\n{context}\n\n"
         f"### Pergunta:\n{question}\n\n"
         "### Resposta:"

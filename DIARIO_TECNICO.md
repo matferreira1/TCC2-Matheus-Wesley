@@ -2761,3 +2761,59 @@ Quatro ementas selecionadas de `data/db/iajuris.db` para cobrir os casos relevan
 - ✅ **224 testes passando** (211 → 224; +13 testes; 0 falhas, 0 skips)
 - ✅ **`_extract_ementa_payload` coberto com ementas reais** — 4 processos do corpus, variações de cabeçalho e tamanho
 - ✅ **Regressão detectável** — qualquer alteração no regex de seções ou na lógica de extração que quebre o comportamento real será capturada
+
+---
+
+## Fase 29 — Remoção do filtro de data (27 de abril de 2026)
+
+### 29.1 Motivação
+
+O filtro temporal (`date_from` / `date_to`) foi removido do sistema a pedido da equipe. A funcionalidade adicionava complexidade à API, ao frontend e ao pipeline de busca sem representar um requisito central do TCC. A remoção simplifica a interface, elimina código morto e reduz a superfície de testes a manter.
+
+### 29.2 Decisões de Projeto
+
+- **Remoção completa**: nenhuma flag de feature — o código foi apagado inteiramente de todos os pontos de integração.
+- **`_parse_br_date` removida**: função auxiliar de parse de datas no `semantic_service.py` que era usada exclusivamente pelo filtro; sem outros consumidores.
+- **Import `datetime` removido** de `semantic_service.py` após tornar-se órfão.
+- **Testes removidos** (não marcados como skip): 11 testes referentes ao filtro de data em `test_search.py`, `test_rag.py` e `test_api.py`.
+
+### 29.3 Arquivos Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `static/index.html` | Removido bloco `<details id="filter-details">`, linhas JS `date_from`/`date_to`, função `clearDates()` |
+| `src/api/schemas/query_schema.py` | Removidos campos `date_from` e `date_to` de `QueryRequest` |
+| `src/api/routes/query.py` | Removidos `date_from`/`date_to` do log e da chamada `rag_service.answer()` |
+| `src/services/rag_service.py` | Removidos parâmetros `date_from`/`date_to` de `answer()` e das chamadas a `search_service` e `semantic_service` |
+| `src/services/search_service.py` | Removidos parâmetros `date_from`/`date_to`, bloco `_DATE_ISO`, condições de filtro e log correspondente |
+| `src/services/semantic_service.py` | Removidos parâmetros `date_from`/`date_to`, bloco de filtro temporal, função `_parse_br_date`, import `datetime` |
+| `tests/test_search.py` | Removidos 6 testes de filtro de data |
+| `tests/test_rag.py` | Removidos 2 testes de filtro de data |
+| `tests/test_api.py` | Removidos 4 testes + seção "filtro temporal" |
+| `README.md` | Removidos exemplo de curl com filtro e linhas `date_from`/`date_to` da tabela de campos |
+
+### 29.4 Estado Após a Fase 29
+
+- ✅ **Filtro de data removido** de toda a stack (frontend, schema, rota, serviços)
+- ✅ **11 testes obsoletos removidos** — suite continua cobrindo o pipeline completo sem os testes de data
+- ✅ **API simplificada** — `QueryRequest` aceita apenas `question`
+
+---
+
+## Fase 30 — Remoção da "Nota sobre as fontes" do prompt (27 de abril de 2026)
+
+### 30.1 Motivação
+
+A regra 4 do prompt v5/v6 instrui o LLM a encerrar toda resposta com um parágrafo fixo "Nota sobre as fontes:" descrevendo a hierarquia de precedentes. A equipe decidiu remover essa nota para tornar as respostas mais diretas e menos repetitivas.
+
+### 30.2 Mudanças
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/rag_service.py` | Regra 4 (`Nota sobre as fontes`) removida do prompt; regras 5 e 6 renumeradas para 4 e 5 |
+| `tests/test_rag.py` | `test_build_prompt_contem_regra_nota_fontes` → `test_build_prompt_contem_regra_citacao`; `test_build_prompt_sv_nota_fontes_menciona_hierarquia_maxima` → `test_build_prompt_sv_efeito_vinculante_no_contexto` (assertivas ajustadas) |
+
+### 30.3 Estado Após a Fase 30
+
+- ✅ **49 testes de `test_rag.py` passando**
+- ✅ **Respostas sem o bloco fixo "Nota sobre as fontes:"**

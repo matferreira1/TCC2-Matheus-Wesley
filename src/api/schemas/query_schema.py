@@ -22,24 +22,6 @@ class QueryRequest(BaseModel):
         examples=["Qual o entendimento do STF sobre sigilo bancário?"],
         description="Pergunta jurídica em linguagem natural.",
     )
-    date_from: str | None = Field(
-        default=None,
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-        examples=["2020-01-01"],
-        description=(
-            "Data de início do filtro temporal no formato YYYY-MM-DD. "
-            "Aplica-se apenas a acórdãos STF — teses e súmulas são sempre incluídas."
-        ),
-    )
-    date_to: str | None = Field(
-        default=None,
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-        examples=["2024-12-31"],
-        description=(
-            "Data de fim do filtro temporal no formato YYYY-MM-DD. "
-            "Aplica-se apenas a acórdãos STF — teses e súmulas são sempre incluídas."
-        ),
-    )
 
 
 # ---------------------------------------------------------------------------

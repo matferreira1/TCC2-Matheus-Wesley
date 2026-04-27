@@ -60,15 +60,11 @@ async def handle_query(
     request_id = str(uuid.uuid4())[:8]
     _check_injection(payload.question)
     logger.info(
-        "POST /query | id=%s | pergunta='%s' | date_from=%s | date_to=%s",
-        request_id, payload.question, payload.date_from, payload.date_to,
+        "POST /query | id=%s | pergunta='%s'",
+        request_id, payload.question,
     )
     try:
-        resp = await rag_service.answer(
-            conn, payload.question,
-            date_from=payload.date_from,
-            date_to=payload.date_to,
-        )
+        resp = await rag_service.answer(conn, payload.question)
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,

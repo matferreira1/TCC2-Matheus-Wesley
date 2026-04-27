@@ -208,17 +208,6 @@ curl -X POST http://localhost:8000/api/v1/query \
   -d '{"question": "Quais os fundamentos para negar seguimento a um habeas corpus?"}'
 ```
 
-**Requisição com filtro temporal (acórdãos STF):**
-```bash
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Quais os fundamentos para negar seguimento a um habeas corpus?",
-    "date_from": "2023-01-01",
-    "date_to":   "2024-12-31"
-  }'
-```
-
 **Resposta:**
 ```json
 {
@@ -247,8 +236,6 @@ curl -X POST http://localhost:8000/api/v1/query \
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
 | `question` | string | Sim | Pergunta jurídica (10–1.000 caracteres) |
-| `date_from` | string (YYYY-MM-DD) | Não | Início do filtro temporal — aplica-se apenas a acórdãos STF |
-| `date_to` | string (YYYY-MM-DD) | Não | Fim do filtro temporal — aplica-se apenas a acórdãos STF |
 
 **Documentação interativa:** `http://localhost:8000/docs`
 

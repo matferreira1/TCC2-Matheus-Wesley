@@ -305,6 +305,19 @@ async def init_db() -> None:
         await _db.execute(trigger_ddl)
 
     await _db.commit()
+
+    # Migração: adiciona colunas ausentes na tabela jurisprudencia (banco legado)
+    cur = await _db.execute("PRAGMA table_info(jurisprudencia)")
+    existing_cols = {row[1] for row in await cur.fetchall()}
+    for col, ddl in (
+        ("orgao_julgador",    "ALTER TABLE jurisprudencia ADD COLUMN orgao_julgador TEXT"),
+        ("repercussao_geral", "ALTER TABLE jurisprudencia ADD COLUMN repercussao_geral INTEGER DEFAULT 0"),
+    ):
+        if col not in existing_cols:
+            await _db.execute(ddl)
+            logger.info("Migração: coluna '%s' adicionada à tabela jurisprudencia.", col)
+    await _db.commit()
+
     logger.info("Schema do banco de dados verificado/criado com sucesso.")
 
 
