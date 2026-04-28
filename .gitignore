@@ -16,10 +16,6 @@ venv/
 env/
 .env
 
-# ─── Banco de dados local ──────────────────────
-data/db/*.db
-data/db/*.sqlite
-data/db/*.sqlite3
 
 # ─── Dados brutos (podem ser grandes) ─────────
 data/raw/*.csv
