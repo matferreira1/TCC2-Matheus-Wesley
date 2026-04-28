@@ -1,0 +1,71 @@
+# Ambiente virtual Python
+.venv/
+venv/
+env/
+
+# Segredos — NUNCA devem entrar na imagem
+.env
+.env.local
+.env.*.local
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Cache HuggingFace local do desenvolvedor
+# (a imagem usa o cache gerado no builder stage, não o local)
+.cache/
+models_cache/
+
+# Arquivos de desenvolvimento e CI
+.git/
+.gitattributes
+.github/
+.claude/
+.vscode/
+.idea/
+
+# Testes — não necessários em produção
+tests/
+eval/
+load_tests/
+pytest.ini
+
+# Documentação
+DIARIO_TECNICO.md
+frontend-design-skill.md
+promptstestes.txt
+DEPLOY.md
+main_patch.py
+
+# Resultados de avaliação
+eval/results/
+
+# Arquivos WAL/SHM do SQLite (gerados em runtime, não devem ser commitados)
+data/db/*.db-shm
+data/db/*.db-wal
+# banco na raiz (duplicata — o correto é data/db/iajuris.db)
+iajuris.db
+
+# Dados brutos — já processados e carregados no iajuris.db
+# Se remover estas linhas, os CSVs e txts entrarão na imagem desnecessariamente
+data/raw/
+data/stj/
+data/stf/
+
+# Relatórios de testes de carga
+load_tests/report.html
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Coverage e relatórios de testes
+.coverage
+htmlcov/
+.pytest_cache/

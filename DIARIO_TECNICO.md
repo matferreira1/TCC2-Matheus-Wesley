@@ -2817,3 +2817,9 @@ A regra 4 do prompt v5/v6 instrui o LLM a encerrar toda resposta com um parágra
 
 - ✅ **49 testes de `test_rag.py` passando**
 - ✅ **Respostas sem o bloco fixo "Nota sobre as fontes:"**
+
+### 31 Dockerizando a aplicação
+
+- **download_models.py** para ser executado somente durante a Docker Build. Tem a responsabilidade de fazer o download e cache dos modelos HuggingFace para que o container não precise baixá-los em runtime, e dessa forma eliminando a latência no cold start.
+- **Iajuris.db** foi comitado para o repositório utilizando o GIT LFS. O motivo é por conta do banco ter centenas de MB de embeddings BLOB, e o GIT rejeita os arquivos >100MB. O GIT LFS armazena o binário externamente e mantém um ponteiro no repositório.
+- **dockerfile** criado para poder subir o container da aplicação. OBS: nesse caso está sendo utilizado a API KEY do groq. Basta colocar a sua API_KEY de acordo como segue a documentação de **deploy.md**.
