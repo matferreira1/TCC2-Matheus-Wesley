@@ -2818,6 +2818,72 @@ A regra 4 do prompt v5/v6 instrui o LLM a encerrar toda resposta com um parágra
 - ✅ **49 testes de `test_rag.py` passando**
 - ✅ **Respostas sem o bloco fixo "Nota sobre as fontes:"**
 
+---
+
+## Fase 32 — Expansão do Dicionário de Sinônimos: Domínio Bancário/Financeiro (13 de maio de 2026)
+
+### 32.1 Motivação
+
+Durante testes de avaliação foi identificado um problema de ambiguidade lexical com a palavra "conta": consultas sobre fraude bancária (ex.: "banco debitou saldo da conta e alegou que cliente usou senha correta") retornavam acórdãos sobre "prestação de contas" (direito administrativo) em vez de jurisprudência bancária/consumerista.
+
+**Causa raiz (três camadas):**
+1. O tokenizador em `search_service.py` separa tudo em tokens isolados unidos por `OR` — "conta" (5 chars, não é stopword) dispara sozinho contra todos os documentos com "conta", que na base são majoritariamente de prestação de contas.
+2. O dicionário `_SYNONYMS` em `query_expansion.py` não tinha nenhuma entrada para banco, fraude, débito, senha ou transferência — sem expansão, o sinal dos termos corretos era fraco demais.
+3. O cross-encoder reranker não consegue salvar: se todos os candidatos RRF já são de prestação de contas (corpus dominante), o reranker só reordena um conjunto errado.
+
+### 32.2 Solução Implementada
+
+Adicionadas 14 novas entradas ao `_SYNONYMS` cobrindo o domínio bancário/financeiro:
+
+| Chave | Sinônimos adicionados |
+|---|---|
+| `banco` | instituicao, financeira, bancario, caixa |
+| `conta bancaria` | deposito, saque, debito, credito, bancario |
+| `fraude bancaria` | estelionato, golpe, clonagem, furto |
+| `fraude` | estelionato, golpe, enganacao, falsidade |
+| `debito` | saque, lancamento, movimentacao, desconto |
+| `senha` | autenticacao, acesso, credencial, seguranca |
+| `cartao` | credito, debito, bancario, clonagem |
+| `transferencia` | pix, ted, remessa, bancaria |
+| `pix` | transferencia, instantanea, bancaria |
+| `saque` | debito, retirada, movimentacao, conta |
+| `estelionato` | fraude, golpe, enganacao, falsidade |
+| `clonagem` | fraude, cartao, bancario, furto |
+| `responsabilidade banco` | fortuito, interno, risco, atividade |
+| `fortuito interno` | risco, atividade, banco, responsabilidade |
+
+A entrada `fortuito interno` é especialmente importante: é o fundamento jurídico padrão para responsabilidade dos bancos por fraudes eletrônicas (STJ aplica o conceito de fortuito interno para afastar excludente de responsabilidade).
+
+### 32.3 Testes Adicionados
+
+11 novos testes em `tests/test_query_expansion.py` cobrindo os cenários bancários:
+- `test_expand_banco_adds_financeira_e_bancario`
+- `test_expand_fraude_adds_estelionato_e_golpe`
+- `test_expand_debito_adds_saque_e_movimentacao`
+- `test_expand_senha_adds_autenticacao_e_credencial`
+- `test_expand_conta_bancaria_adds_deposito_e_bancario`
+- `test_expand_fraude_bancaria_adds_estelionato_e_clonagem`
+- `test_expand_pix_adds_transferencia_e_bancaria`
+- `test_expand_estelionato_adds_fraude_e_golpe`
+- `test_expand_clonagem_adds_fraude_e_cartao`
+- `test_expand_responsabilidade_banco_adds_risco`
+- `test_expand_fortuito_interno_adds_banco`
+
+### 32.4 Arquivos Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/query_expansion.py` | +14 entradas no dicionário `_SYNONYMS` (domínio bancário) |
+| `tests/test_query_expansion.py` | +11 testes para os novos sinônimos |
+
+### 32.5 Estado Após a Fase 32
+
+- ✅ **54 testes de `test_query_expansion.py` passando** (antes: 43)
+- ✅ **Queries bancárias expandem corretamente** — "banco débito senha" → inclui "estelionato", "clonagem", "risco", "atividade", "fortuito"
+- ✅ **Ambiguidade "conta" mitigada** — contexto bancário agora gera sinal suficiente para superar "prestação de contas" no BM25
+
+---
+
 ### 31 Dockerizando a aplicação
 
 - **download_models.py** para ser executado somente durante a Docker Build. Tem a responsabilidade de fazer o download e cache dos modelos HuggingFace para que o container não precise baixá-los em runtime, e dessa forma eliminando a latência no cold start.

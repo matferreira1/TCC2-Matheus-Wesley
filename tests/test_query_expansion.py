@@ -310,3 +310,74 @@ def test_expand_seguridade_social() -> None:
     result = expand_query(["seguridade", "social"])
     assert "previdencia" in result
     assert "inss" in result
+
+
+# ===========================================================================
+# expand_query — Direito bancário / fraude financeira
+# ===========================================================================
+
+
+def test_expand_banco_adds_financeira_e_bancario() -> None:
+    result = expand_query(["banco"])
+    assert "financeira" in result
+    assert "bancario" in result
+
+
+def test_expand_fraude_adds_estelionato_e_golpe() -> None:
+    result = expand_query(["fraude"])
+    assert "estelionato" in result
+    assert "golpe" in result
+
+
+def test_expand_debito_adds_saque_e_movimentacao() -> None:
+    result = expand_query(["debito"])
+    assert "saque" in result
+    assert "movimentacao" in result
+
+
+def test_expand_senha_adds_autenticacao_e_credencial() -> None:
+    result = expand_query(["senha"])
+    assert "autenticacao" in result
+    assert "credencial" in result
+
+
+def test_expand_conta_bancaria_adds_deposito_e_bancario() -> None:
+    result = expand_query(["conta", "bancaria"])
+    assert "deposito" in result
+    assert "bancario" in result
+
+
+def test_expand_fraude_bancaria_adds_estelionato_e_clonagem() -> None:
+    result = expand_query(["fraude", "bancaria"])
+    assert "estelionato" in result
+    assert "clonagem" in result
+
+
+def test_expand_pix_adds_transferencia_e_bancaria() -> None:
+    result = expand_query(["pix"])
+    assert "transferencia" in result
+    assert "bancaria" in result
+
+
+def test_expand_estelionato_adds_fraude_e_golpe() -> None:
+    result = expand_query(["estelionato"])
+    assert "fraude" in result
+    assert "golpe" in result
+
+
+def test_expand_clonagem_adds_fraude_e_cartao() -> None:
+    result = expand_query(["clonagem"])
+    assert "fraude" in result
+    assert "cartao" in result
+
+
+def test_expand_responsabilidade_banco_adds_risco() -> None:
+    result = expand_query(["responsabilidade", "banco"])
+    assert "risco" in result
+    assert "atividade" in result
+
+
+def test_expand_fortuito_interno_adds_banco() -> None:
+    result = expand_query(["fortuito", "interno"])
+    assert "banco" in result
+    assert "responsabilidade" in result
