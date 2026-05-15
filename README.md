@@ -379,3 +379,33 @@ iajuris/
 | `RERANKER_ENABLED` | `true` | Ativa cross-encoder pós-RRF (desativar para menor latência em CPU) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Limite de requisições/min por IP em `/query` (aumentar para testes de carga) |
 | `DEBUG` | `false` | Habilita logging detalhado |
+
+---
+
+## Deploy em produção
+
+O banco de dados (`iajuris.db`, ~750 MB após conversão float16) **não está no repositório git** — é transferido separadamente para o servidor e montado como volume Docker.
+
+```bash
+# 1. Converter embeddings para float16 (executar uma vez após generate_embeddings)
+python -m etl.convert_to_float16
+
+# 2. Consolidar WAL do SQLite
+python3 -c "import sqlite3; conn=sqlite3.connect('data/db/iajuris.db'); conn.execute('PRAGMA wal_checkpoint(TRUNCATE)'); conn.close()"
+
+# 3. Transferir banco para o servidor
+scp data/db/iajuris.db usuario@servidor:/app/data/db/iajuris.db
+
+# 4. No servidor: clonar repo, criar .env e subir container
+git clone https://github.com/matferreira1/TCC2-Matheus-Wesley.git /app
+cd /app && cp .env.example .env  # preencher GROQ_API_KEY
+docker build -t iajuris .
+docker run -d \
+  -p 8000:8000 \
+  -v /app/data/db:/app/data/db \
+  --env-file .env \
+  --name iajuris \
+  iajuris
+```
+
+**Requisitos mínimos do servidor:** 2 GB RAM, 2 GB de espaço em disco para o banco.

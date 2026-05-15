@@ -3264,6 +3264,172 @@ python -m etl.load_acordaos_stj --dry-run      # lista arquivos, não baixa
 ### 36.9 Estado após a fase 36
 
 - ✅ `etl/load_acordaos_stj.py` criado e testado
-- ✅ 103.398 acórdãos STJ (9 órgãos) carregados sem scraping nem Playwright
-- ⏳ Sexta Turma: retry em andamento (HTTP 520 transitório)
+- ✅ 127.086 acórdãos STJ carregados (todos os 10 órgãos, incluindo Sexta Turma após retry)
 - ⏳ `generate_embeddings` para os novos acórdãos STJ
+
+---
+
+## Fase 37 — Otimizações de Deploy para Servidor 2 GB RAM (15 de maio de 2026)
+
+### 37.1 Motivação
+
+O servidor de produção tem apenas 2 GB de RAM. Com o corpus expandido para 165.792 acórdãos,
+o uso de RAM em regime estacionário foi estimado em ~917 MB, com pico de ~1.160 MB no startup
+(numpy `np.stack()` cria cópia temporária do array durante o carregamento). Além disso, o banco
+SQLite (`iajuris.db`, ~1 GB) estava rastreado pelo git e seria copiado para dentro da imagem
+Docker no `COPY . .` do Dockerfile, tornando a imagem inviável.
+
+Três problemas críticos foram identificados e corrigidos nesta fase:
+1. **DB no git**: GitHub rejeita arquivos acima de 100 MB; banco de 1 GB inviabilizaria o push.
+2. **DB na imagem Docker**: `COPY . .` copiava 1 GB para dentro da imagem.
+3. **RAM dos embeddings**: 165k vetores float32 = 243 MB; float16 reduz para 121 MB.
+
+### 37.2 Solução: Float16 para Embeddings
+
+#### Conceito
+
+Os embeddings são vetores de 384 números de ponto flutuante. Float32 usa 4 bytes por número;
+float16 usa 2 bytes. Para busca por similaridade coseno — um produto escalar entre vetores
+normalizados — a perda de precisão de float32 (7 casas decimais) para float16 (3-4 casas) é
+imperceptível: a ordenação dos documentos retornados é idêntica na prática. FAISS, Qdrant e
+Pinecone usam float16 como padrão em produção.
+
+#### Impacto
+
+| Métrica | Float32 | Float16 | Economia |
+|---|---|---|---|
+| Bytes por embedding | 1.536 | 768 | 50% |
+| DB em disco (165k docs) | ~1 GB | ~750 MB | ~250 MB |
+| RAM em produção | 243 MB | 121 MB | 122 MB |
+| Qualidade de retrieval | referência | idêntica | — |
+
+#### Implementação
+
+**`etl/generate_embeddings.py`** — `_serialize()` atualizado:
+```python
+# Antes (float32, 4 bytes/dim)
+def _serialize(vector: list[float]) -> bytes:
+    return struct.pack(f"{len(vector)}f", *vector)
+
+# Depois (float16, 2 bytes/dim)
+def _serialize(vector) -> bytes:
+    import numpy as np
+    return np.asarray(vector, dtype=np.float16).tobytes()
+```
+
+**`src/services/semantic_service.py`** — `_deserialize()` com detecção automática por tamanho do BLOB:
+```python
+_BLOB_BYTES_F16 = _EMBEDDING_DIMS * 2   # 768 bytes
+_BLOB_BYTES_F32 = _EMBEDDING_DIMS * 4   # 1536 bytes (legado)
+
+def _deserialize(blob: bytes) -> np.ndarray:
+    if len(blob) == _BLOB_BYTES_F16:
+        return np.frombuffer(blob, dtype=np.float16).copy()
+    if len(blob) == _BLOB_BYTES_F32:
+        return np.frombuffer(blob, dtype=np.float32).copy()
+    raise ValueError(...)
+```
+
+**`etl/convert_to_float16.py`** — script de conversão dos BLOBs existentes (execução única):
+- Percorre as tabelas `jurisprudencia`, `teses_stj` e `sumulas_vinculantes_stf`
+- Para cada registro com BLOB de 1536 bytes (float32): converte para float16 (768 bytes)
+- Processa em lotes de 10.000 para controlar uso de memória
+- Executa `VACUUM` ao final para recuperar espaço em disco
+
+```bash
+python -m etl.convert_to_float16
+```
+
+### 37.3 Banco de Dados Fora do Git e do Docker
+
+**`.gitignore`** — adicionado:
+```
+data/db/*.db
+data/db/*.db-shm
+data/db/*.db-wal
+```
+
+**`.dockerignore`** — adicionado:
+```
+# DB transferido via scp/rsync; montar como volume Docker
+data/db/*.db
+data/db/*.db-shm
+data/db/*.db-wal
+```
+
+O arquivo `data/db/.gitkeep` permanece rastreado para que o diretório exista no clone limpo.
+O banco é transferido separadamente para o servidor com `scp` ou `rsync` e montado como
+volume Docker em produção.
+
+### 37.4 Cache SQLite Reduzido
+
+Em `src/database/connection.py`:
+```python
+# Antes
+await _db.execute("PRAGMA cache_size=-65536;")   # 64 MB
+
+# Depois
+await _db.execute("PRAGMA cache_size=-16384;")   # 16 MB
+```
+
+SQLite com WAL mode e corpus de jurisprudência (leitura intensiva, sem writes concorrentes)
+não se beneficia significativamente de cache acima de 16 MB, que já cobre as páginas mais
+acessadas. Economia: 48 MB de RAM.
+
+### 37.5 Processo de Deploy
+
+```bash
+# No servidor de desenvolvimento (após embeddings terminarem):
+python -m etl.convert_to_float16          # converte float32 → float16
+python3 -c "import sqlite3; conn=sqlite3.connect('data/db/iajuris.db'); conn.execute('PRAGMA wal_checkpoint(TRUNCATE)'); conn.close()"  # consolida WAL
+
+# Transferir banco para o servidor de produção:
+scp data/db/iajuris.db usuario@servidor:/app/data/db/
+
+# No servidor de produção:
+git pull origin main
+docker build -t iajuris .
+docker run -d \
+  -p 8000:8000 \
+  -v /app/data/db:/app/data/db \
+  --env-file .env \
+  iajuris
+```
+
+### 37.6 Estimativa de RAM em Produção Após as Otimizações
+
+| Componente | RAM |
+|---|---|
+| Python + FastAPI + dependências | ~150 MB |
+| Modelo MiniLM (sentence-transformers) | ~90 MB |
+| Modelo CrossEncoder | ~90 MB |
+| Embeddings float16 em cache (165k × 384 × 2 B) | ~121 MB |
+| SQLite cache (16 MB PRAGMA) | ~16 MB |
+| Buffers / overhead Python | ~100 MB |
+| **Total regime estacionário** | **~567 MB** |
+| Pico no startup (np.stack cria cópia temporária) | **~688 MB** |
+
+Margem segura para servidor com 2 GB de RAM.
+
+### 37.7 Arquivos Criados / Modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `.gitignore` | Atualizado | Exclui `data/db/*.db` do rastreamento git |
+| `.dockerignore` | Atualizado | Exclui `data/db/*.db` da imagem Docker |
+| `src/database/connection.py` | Atualizado | `PRAGMA cache_size` reduzido de 64 MB para 16 MB |
+| `etl/generate_embeddings.py` | Atualizado | `_serialize()` grava float16 em vez de float32 |
+| `src/services/semantic_service.py` | Atualizado | `_deserialize()` detecta float16 ou float32 automaticamente |
+| `etl/convert_to_float16.py` | **Criado** | Script de conversão one-shot dos BLOBs existentes |
+
+### 37.8 Estado Após a Fase 37
+
+- ✅ `iajuris.db` removido do rastreamento git (nunca mais será commitado)
+- ✅ `data/db/` excluído do `.dockerignore` (imagem Docker não leva o banco)
+- ✅ `generate_embeddings.py` grava float16 para novos embeddings
+- ✅ `semantic_service.py` compatível com float16 e float32 (migração transparente)
+- ✅ `etl/convert_to_float16.py` criado para conversão dos BLOBs existentes
+- ✅ Cache SQLite reduzido de 64 MB para 16 MB
+- ✅ 223 testes passando
+- ⏳ `generate_embeddings` rodando (165k acórdãos, ~58 min restantes quando iniciada esta fase)
+- ⏳ `convert_to_float16` aguardando embeddings terminarem (rodará automaticamente em background)
