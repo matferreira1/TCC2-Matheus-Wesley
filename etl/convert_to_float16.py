@@ -55,14 +55,15 @@ def _convert_table(conn: sqlite3.Connection, table: str, col: str) -> int:
 
     logger.info("%s: convertendo %d embeddings float32 → float16...", table, total)
 
-    offset = 0
+    # Sem OFFSET: após converter um lote, esses registros somem do WHERE
+    # (length deixa de ser _F32_BYTES), então sempre buscamos do início.
     converted = 0
     while True:
         cur.execute(
             f"SELECT id, {col} FROM {table} "
             f"WHERE {col} IS NOT NULL AND length({col}) = ? "
-            f"LIMIT ? OFFSET ?",
-            (_F32_BYTES, BATCH_SIZE, offset),
+            f"LIMIT ?",
+            (_F32_BYTES, BATCH_SIZE),
         )
         rows = cur.fetchall()
         if not rows:
@@ -81,7 +82,6 @@ def _convert_table(conn: sqlite3.Connection, table: str, col: str) -> int:
         conn.commit()
         converted += len(rows)
         logger.info("%s: %d/%d convertidos", table, converted, total)
-        offset += BATCH_SIZE
 
     return converted
 
