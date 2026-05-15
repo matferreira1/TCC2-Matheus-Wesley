@@ -233,7 +233,7 @@ async def open_db() -> None:
     _db.row_factory = aiosqlite.Row  # resultados acessíveis por nome de coluna
 
     await _db.execute("PRAGMA journal_mode=WAL;")
-    await _db.execute("PRAGMA cache_size=-65536;")   # 64 MB
+    await _db.execute("PRAGMA cache_size=-16384;")   # 16 MB — adequado para servidor 2 GB
     await _db.execute("PRAGMA synchronous=NORMAL;")  # seguro com WAL
     await _db.execute("PRAGMA foreign_keys=ON;")
     await _db.commit()

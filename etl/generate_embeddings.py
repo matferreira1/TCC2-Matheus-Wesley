@@ -35,9 +35,10 @@ MAX_CHARS_ACORDAO = 1000
 MAX_CHARS_TESE = 500
 
 
-def _serialize(vector: list[float]) -> bytes:
-    """Converte lista de floats em bytes (little-endian float32)."""
-    return struct.pack(f"{len(vector)}f", *vector)
+def _serialize(vector) -> bytes:
+    """Converte vetor em bytes float16 (metade do espaço vs float32, sem perda de qualidade em retrieval)."""
+    import numpy as np
+    return np.asarray(vector, dtype=np.float16).tobytes()
 
 
 def _ensure_columns(conn: sqlite3.Connection) -> None:

@@ -63,10 +63,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # RAG
     # ------------------------------------------------------------------
-    rag_top_k: int = 6              # nº de acórdãos recuperados pelo FTS5
-    rag_top_k_teses: int = 3        # nº de teses STJ recuperadas pelo FTS5
+    rag_top_k: int = 8              # nº de acórdãos recuperados (STF + STJ)
+    rag_top_k_teses: int = 2        # nº de teses STJ recuperadas
     rag_max_tokens: int = 2048      # limite de tokens na geração
-    rag_max_ementa_chars: int = 1500  # limite por ementa na montagem do prompt
+    rag_max_ementa_chars: int = 2500  # limite por ementa na montagem do prompt
 
     # ------------------------------------------------------------------
     # Reranking cross-encoder (estágio pós-RRF)

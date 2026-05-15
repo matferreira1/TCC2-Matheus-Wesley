@@ -4,8 +4,11 @@ import asyncio
 import re
 from pathlib import Path
 
-# Aceita apenas nomes no padrão esperado: letras, dígitos, hífens e underscores
-_CSV_NAME_RE = re.compile(r'^resultados-de-acordaos[\w\-]*\.csv$')
+# Padrões de nome aceitos para CSVs de acórdãos STF
+_CSV_NAME_RES = [
+    re.compile(r'^resultados-de-acordaos[\w\-\s\(\)]*\.csv$'),
+    re.compile(r'^export_acordaos[\w\-]*\.csv$'),
+]
 
 import aiosqlite
 
@@ -17,13 +20,14 @@ RAW_DIR = Path("data/raw")
 
 
 def _collect_csvs() -> list[Path]:
-    """Coleta todos os CSVs de acórdãos em data/raw, validando nomes."""
+    """Coleta todos os CSVs de acórdãos em data/raw, aceitando ambos os formatos de nome."""
     all_csvs = sorted(
-        p for p in RAW_DIR.glob("resultados-de-acordaos*.csv")
-        if _CSV_NAME_RE.match(p.name)
+        p for p in RAW_DIR.glob("*.csv")
+        if any(rx.match(p.name) for rx in _CSV_NAME_RES)
     )
     if not all_csvs:
-        raise FileNotFoundError(f"Nenhum CSV encontrado em {RAW_DIR}")
+        raise FileNotFoundError(f"Nenhum CSV de acórdãos encontrado em {RAW_DIR}")
+    print(f"  {len(all_csvs)} arquivo(s) CSV encontrado(s).")
     return all_csvs
 
 
@@ -57,6 +61,7 @@ async def load() -> None:
             CREATE VIRTUAL TABLE jurisprudencia_fts
             USING fts5(
                 ementa,
+                decisao,
                 content='jurisprudencia',
                 content_rowid='id',
                 tokenize='unicode61 remove_diacritics 1'

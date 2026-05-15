@@ -62,17 +62,20 @@ def _embed_query(query: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-_EMBEDDING_DIMS = 384                        # paraphrase-multilingual-MiniLM-L12-v2
-_EXPECTED_BLOB_BYTES = _EMBEDDING_DIMS * 4   # float32 = 4 bytes
+_EMBEDDING_DIMS = 384                         # paraphrase-multilingual-MiniLM-L12-v2
+_BLOB_BYTES_F16 = _EMBEDDING_DIMS * 2         # float16 = 2 bytes (padrão atual)
+_BLOB_BYTES_F32 = _EMBEDDING_DIMS * 4         # float32 = 4 bytes (legado)
 
 
 def _deserialize(blob: bytes) -> np.ndarray:
-    if len(blob) != _EXPECTED_BLOB_BYTES:
-        raise ValueError(
-            f"Tamanho de embedding inválido: {len(blob)} bytes "
-            f"(esperado {_EXPECTED_BLOB_BYTES} para {_EMBEDDING_DIMS} dimensões)."
-        )
-    return np.frombuffer(blob, dtype=np.float32).copy()
+    if len(blob) == _BLOB_BYTES_F16:
+        return np.frombuffer(blob, dtype=np.float16).copy()
+    if len(blob) == _BLOB_BYTES_F32:
+        return np.frombuffer(blob, dtype=np.float32).copy()
+    raise ValueError(
+        f"Tamanho de embedding inválido: {len(blob)} bytes "
+        f"(esperado {_BLOB_BYTES_F16} float16 ou {_BLOB_BYTES_F32} float32)."
+    )
 
 
 # ---------------------------------------------------------------------------

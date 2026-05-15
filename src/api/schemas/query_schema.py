@@ -4,7 +4,7 @@ Schemas Pydantic para o endpoint de consulta RAG.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -22,6 +22,24 @@ class QueryRequest(BaseModel):
         examples=["Qual o entendimento do STF sobre sigilo bancário?"],
         description="Pergunta jurídica em linguagem natural.",
     )
+    required_terms: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Até 5 termos que devem estar presentes em cada fonte retornada. "
+            "Aplica filtro pós-RRF: fontes que não contêm todos os termos são descartadas."
+        ),
+    )
+
+    @field_validator("required_terms")
+    @classmethod
+    def _validate_terms(cls, v: list[str]) -> list[str]:
+        cleaned = [t.strip() for t in v if t.strip()]
+        if len(cleaned) > 5:
+            raise ValueError("Máximo de 5 termos obrigatórios.")
+        for t in cleaned:
+            if len(t) < 2 or len(t) > 60:
+                raise ValueError("Cada termo deve ter entre 2 e 60 caracteres.")
+        return cleaned
 
 
 # ---------------------------------------------------------------------------

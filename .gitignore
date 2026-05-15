@@ -17,6 +17,11 @@ env/
 .env
 
 
+# ─── Banco de dados SQLite (grande demais para o git) ─────
+data/db/*.db
+data/db/*.db-shm
+data/db/*.db-wal
+
 # ─── Dados brutos (podem ser grandes) ─────────
 data/raw/*.csv
 data/raw/*.zip

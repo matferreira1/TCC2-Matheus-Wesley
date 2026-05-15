@@ -44,10 +44,11 @@ main_patch.py
 # Resultados de avaliação
 eval/results/
 
-# Arquivos WAL/SHM do SQLite (gerados em runtime, não devem ser commitados)
+# Banco de dados SQLite — transferido separadamente via scp/rsync para o servidor
+# NÃO deve entrar na imagem Docker (1 GB+); montar como volume em produção
+data/db/*.db
 data/db/*.db-shm
 data/db/*.db-wal
-# banco na raiz (duplicata — o correto é data/db/iajuris.db)
 iajuris.db
 
 # Dados brutos — já processados e carregados no iajuris.db

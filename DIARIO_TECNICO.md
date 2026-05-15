@@ -2889,3 +2889,381 @@ A entrada `fortuito interno` é especialmente importante: é o fundamento juríd
 - **download_models.py** para ser executado somente durante a Docker Build. Tem a responsabilidade de fazer o download e cache dos modelos HuggingFace para que o container não precise baixá-los em runtime, e dessa forma eliminando a latência no cold start.
 - **Iajuris.db** foi comitado para o repositório utilizando o GIT LFS. O motivo é por conta do banco ter centenas de MB de embeddings BLOB, e o GIT rejeita os arquivos >100MB. O GIT LFS armazena o binário externamente e mantém um ponteiro no repositório.
 - **dockerfile** criado para poder subir o container da aplicação. OBS: nesse caso está sendo utilizado a API KEY do groq. Basta colocar a sua API_KEY de acordo como segue a documentação de **deploy.md**.
+
+---
+
+## Fase 33 — Filtro de Termos Obrigatórios (Required Terms) (13 de maio de 2026)
+
+### 33.1 Motivação
+
+Durante entrevista com usuária (advogada), o sistema retornou ementas completamente irrelevantes para uma consulta sobre **substituição de prisão preventiva por prisão domiciliar para mãe de crianças que cometeu crime sem grave ameaça**. Entre os resultados apareceram acórdãos sobre tráfico de drogas — crime que nada tem a ver com a ausência de grave ameaça que caracteriza a situação consultada.
+
+**Causa raiz (três camadas):**
+1. O FTS5 usa join OR em todos os tokens — "crime", "prisão", "preventiva", "domiciliar" casam com qualquer acórdão de tráfico que discuta esses conceitos.
+2. Casos de tráfico frequentemente discutem prisão domiciliar para mães (art. 318 CPP), então o cross-encoder os considera topicamente relevantes.
+3. O cross-encoder não distingue "caso de tráfico onde também se discute domiciliar" de "caso cujo fundamento central é a ausência de grave ameaça".
+
+**Sugestão da entrevistada:** funcionalidade idêntica à dos portais de tribunais (Jusbrasil, STJ SCON), onde o usuário define palavras-chave que guiam a busca — termos que devem obrigatoriamente aparecer nos resultados.
+
+### 33.2 Solução Implementada
+
+Adicionado campo `required_terms` ao `QueryRequest` e função `_apply_required_terms_filter` no pipeline RAG. O filtro é aplicado **após o RRF e antes do cross-encoder**, descartando candidatos que não contêm todos os termos especificados.
+
+**Decisões de projeto:**
+- Filtro como *substring normalizada* (sem acentos, lowercase): "prisão domiciliar" casa com "prisao domiciliar" e vice-versa, independente de acentuação no banco ou na query do usuário.
+- **Fallback gracioso**: se nenhum candidato passar (ex.: termos muito restritivos para o corpus), o filtro retorna a lista original intacta — evita contexto vazio no prompt e resposta inútil.
+- Termos multi-palavra são tratados como frases: "grave ameaça" exige que essa sequência exata apareça no documento (não apenas os tokens separados), o que maximiza a precisão.
+- Máximo de 5 termos — coerente com o limite de 5 campos de pesquisa dos portais de referência.
+- Validação Pydantic no schema: cada termo entre 2 e 60 caracteres, lista com no máximo 5 itens.
+
+**Exemplo de uso do caso da entrevistada:**
+- Pergunta: "Mãe de crianças de 8 e 10 anos, crime sem grave ameaça. Pode substituir prisão preventiva por prisão domiciliar?"
+- Termos obrigatórios: `["grave ameaça"]`
+- Resultado: apenas acórdãos que discutem explicitamente "grave ameaça" como critério de elegibilidade — casos de tráfico (que têm grave ameaça e não discutem a ausência dela) são eliminados.
+
+### 33.3 Frontend: Seção "Filtros Avançados"
+
+Adicionada seção colapsável abaixo do textarea com chip input:
+- Botão "+ Filtros avançados" expande/recolhe o painel.
+- O usuário digita um termo e pressiona Enter (ou vírgula) para adicionar como chip.
+- Chips são removíveis via botão ×.
+- Campo desabilitado automaticamente ao atingir 5 termos.
+- `reset()` limpa os chips e recolhe o painel.
+- Na submissão, `required_terms` só é incluído no JSON se a lista não estiver vazia (sem impacto nas queries existentes sem filtro).
+
+### 33.4 Arquivos Modificados
+
+| Arquivo | Alteração |
+|---|---|
+| `src/api/schemas/query_schema.py` | Campo `required_terms: list[str]` + `@field_validator` para validação |
+| `src/api/routes/query.py` | Repassa `payload.required_terms` para `rag_service.answer()` |
+| `src/services/rag_service.py` | Import `unicodedata`; funções `_normalize_text()` e `_apply_required_terms_filter()`; parâmetro `required_terms` em `answer()`; filtro aplicado pós-RRF |
+| `static/index.html` | Seção "Filtros avançados" com chip input; lógica JS `toggleAdvanced`, `renderChips`, `removeTerm`; `reset()` atualizado |
+
+### 33.5 Revisão: Re-ranking Automático por Bigramas (mesma data)
+
+Após análise mais profunda, identificou-se que o problema descrito pela entrevistada não era totalmente resolvível por filtro manual: o diferencial real entre "caso relevante" e "tráfico de drogas" é que a frase "sem grave ameaça" aparece em casos sobre crimes sem violência mas **nunca** em casos de tráfico (que envolvem grave ameaça por definição). Nenhum filtro manual captura isso automaticamente.
+
+**Solução adicionada**: re-ranking automático por cobertura de bigramas da pergunta, aplicado pós-RRF e antes do cross-encoder:
+- Bigramas extraídos da pergunta normalizada (ex: "sem grave", "grave ameaca", "crime sem", "prisao preventiva")
+- Score combinado: 55% posição RRF + 45% cobertura de bigramas
+- Docs de tráfico que só compartilham "prisao preventiva" e "domiciliar" (cov ~17%) ficam abaixo de docs que também contêm "sem grave" e "crime sem" (cov ~58%)
+- **Sem filtro hard** — todos os candidatos permanecem, apenas reordenados
+
+**Frontend**: removida a seção "Filtros avançados" da UI (a interface permanece limpa). `required_terms` fica disponível apenas via API para uso programático/testes.
+
+### 33.6 Arquivos Modificados (revisão)
+
+| Arquivo | Alteração |
+|---|---|
+| `src/services/rag_service.py` | `_BIGRAM_STOPWORDS`, `_tokenize_for_bigrams()`, `_get_doc_text()`, `_rerank_by_bigram_coverage()` + chamada pós-RRF |
+| `static/index.html` | Removida seção "Filtros avançados" e JS associado |
+
+### 33.8 Refinamento: Opção 3 — Gate Hard + Peso Maior na Cobertura (14 de maio de 2026)
+
+Simulação passo a passo dos dois casos problemáticos (prisão domiciliar + fraude bancária) revelou que a fórmula original `0.55×pos + 0.45×cov` era insuficiente para eliminar resultados errados: documentos na posição 1 do RRF (`pos_score = 1.000`) tinham vantagem matemática que a cobertura não conseguia superar mesmo com 45% de peso.
+
+**Opção 3 implementada (dois estágios):**
+
+1. **Gate hard (cobertura == 0)**: candidatos sem nenhum bigrama da query no texto são descartados antes do rerank. Elimina casos completamente alheios ao tema (ex.: "prestação de contas" numa query sobre fraude bancária) que chegavam ao topo do RRF apenas por terem tokens genéricos em comum. Fallback: se todos os candidatos tiverem cobertura zero, o gate é ignorado.
+
+2. **Soft rerank com 40%/60%**: fórmula alterada de `0.55×pos + 0.45×cov` para `0.40×pos + 0.60×cov`. Com o peso maior na cobertura, um documento de posição inferior com frases-chave específicas pode ultrapassar um de posição superior com cobertura baixa.
+
+**Efeito nos dois casos simulados:**
+
+| Caso | Antigo (RRF puro) | Após opção 1 | Após opção 3 |
+|------|------------------|--------------|--------------|
+| Prisão domiciliar (mãe) | 3/6 relevantes, 3 tráfico | 4/6, 2 tráfico | 4/6 + Tráfico-A (landmark válido) |
+| Fraude bancária | 3/6 relevantes, 3 prestação de contas | — | 5/6 relevantes, 0 prestação de contas |
+
+**Posições originais do RRF preservadas no cálculo**: após o gate filtrar alguns candidatos, as posições não são re-indexadas — o sinal de qualidade do RRF permanece intacto.
+
+### 33.9 Estado Após a Fase 33 (final)
+
+- ✅ **`required_terms` aceito via API REST** — campo opcional, retro-compatível
+- ✅ **Gate hard**: remove candidatos com cobertura de bigramas = 0% (completamente fora do tema)
+- ✅ **Soft rerank 40%/60%**: cobertura de bigramas supera vantagem posicional de docs irrelevantes
+- ✅ **Fallback duplo**: gate ignorado se todos zerados; required_terms retorna lista original se filtro esvazia pool
+- ✅ **Interface inalterada** — zero mudança na UI
+- ✅ **Normalização de acentos** — "sem grave ameaça" casa com "sem grave ameaca" no banco
+- ✅ **223 testes passando** — sem regressões
+
+---
+
+## Fase 34 — Análise de Cobertura de Ementas e ETL de Acórdãos STJ (14 de maio de 2026)
+
+### 34.1 Motivação
+
+Entrevista com advogada revelou que o fluxo real de pesquisa jurídica gira em torno de **ementas**: elas informam o estágio processual, o relator, a decisão e servem diretamente como argumento em petições. Com base nisso, foi feita uma análise quantitativa do corpus atual e identificadas as principais lacunas.
+
+### 34.2 Inventário do corpus (estado pré-fase 34)
+
+| Fonte | Quantidade | Período |
+|---|---|---|
+| STF — Acórdãos (ementas) | 3.420 | set/2025 a mar/2026 (6 meses) |
+| STJ — Teses jurisprudenciais | 3.377 | histórico (270 edições, 17 áreas) |
+| STJ — Súmulas | 676 | Súmulas 1–676 |
+| STF — Súmulas Vinculantes | 58 | SV 1–59 |
+| **Total** | **7.531** | |
+
+### 34.3 Gaps identificados na análise
+
+**Críticos:**
+1. **STF: apenas 6 meses de acórdãos (set/2025–mar/2026)** — jurisprudência histórica (2020–2024) ausente. Advogados citam precedentes consolidados, não apenas os mais recentes.
+2. **STJ: ausência de acórdãos com ementa** — apenas teses abstratas e súmulas; acórdãos concretos (com relator, turma, caso específico) são os mais citados em petições.
+
+**Relevantes:**
+3. `jurispruConsumidor.txt` existe em `data/stj/` mas não é carregado pelo ETL padrão (função `load_area()` precisa ser invocada explicitamente).
+4. Súmulas não vinculantes do STF (Súmulas 1–736) ausentes — só temos as 58 SVs.
+5. Campo `resultado` não estruturado nas ementas STF (provido/negado/parcialmente provido).
+
+### 34.4 Cobertura temática das ementas STF (por ramo)
+
+| Ramo | % de cobertura | Nível |
+|---|---|---|
+| Constitucional | 74,6% | ✅ Excelente |
+| Civil | 42,0% | ✅ Bom |
+| Penal/Criminal | 34,8% | ✅ Bom |
+| Administrativo | 32,2% | ✅ Bom |
+| Saúde/SUS | 28,3% | ✅ Bom |
+| Família | 3,5% | ⚠️ Fraco |
+| Ambiental | 1,5% | ⚠️ Fraco |
+| Consumidor | 0,8% | ❌ Ausente (coberto pelas teses STJ) |
+| Empresarial/Falência | 0,4% | ❌ Ausente (STJ é a instância principal) |
+
+### 34.5 Hierarquia de relevância das classes processuais STF
+
+| Tier | Classes | Por que importa |
+|---|---|---|
+| 1 — Vinculante | ADI, ADPF, ADC, ADO | Efeito erga omnes; uma ADI serve de argumento em milhares de casos |
+| 2 — Repercussão geral | RE, MS, AP | Tese vincula instâncias inferiores; MS é base do direito administrativo |
+| 3 — Aplicação | ARE, HC, RHC | Volume alto (48% do corpus), ementas substantivas (média 1.661 chars) |
+
+**Conclusão**: não há motivo para filtrar por classe no download. São apenas 3,4% de ementas curtas (<500 chars) no corpus atual.
+
+### 34.6 Investigação de acesso automatizado ao STJ/SCON
+
+Foi investigado se é possível automatizar o download de acórdãos do STJ com ementa (via pacote R `{stj}` de jjesusfilho ou diretamente via HTTP/Playwright):
+
+**Resultado:** Ambos os portais estão protegidos por WAF:
+- `scon.stj.jus.br` → **Cloudflare Managed Challenge** (HTTP 403 + `Cf-Mitigated: challenge`)
+- `jurisprudencia.stf.jus.br` → **AWS WAF + challenge.js**
+- `api.stj.jus.br` → DNS não existe (API ainda não lançada)
+
+O pacote R `{stj}` usa `httr` (cliente HTTP sem JS) e provavelmente parou de funcionar quando o Cloudflare foi adicionado ao SCON. Cloudscraper e Playwright headless também são bloqueados (bot score alto para IPs de datacenter).
+
+**Solução desenvolvida:** Script `etl/baixar_stj.py` com Playwright em modo **headed** (browser visível), projetado para rodar na **máquina local do usuário** (IP residencial passa o Cloudflare automaticamente). O script:
+- Abre Chrome visível, passa o desafio Cloudflare sozinho
+- Preenche filtros de data no formulário do SCON
+- Pagina automaticamente pelos resultados
+- Extrai: Titulo, Relator, Data de publicação, Data de julgamento, Órgão julgador, Ementa
+- Salva CSV com as **mesmas colunas dos CSVs do STF** → ETL existente funciona sem alterações
+
+### 34.7 Arquivos criados/modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `etl/baixar_stj.py` | Criado | Downloader Playwright para acórdãos STJ/SCON |
+| `DIARIO_TECNICO.md` | Atualizado | Esta entrada |
+
+### 34.8 Estado após a fase 34
+
+- ✅ Análise quantitativa do corpus completa (inventário, gaps, cobertura temática)
+- ✅ Hierarquia de relevância de classes processuais documentada
+- ✅ `etl/baixar_stj.py` criado — pronto para uso na máquina local
+- ⏳ Download efetivo dos acórdãos STJ pendente (requer execução local)
+- ⏳ Download dos CSVs STF (2020–2024) pendente (requer execução no portal STF)
+
+---
+
+## Fase 35 — Expansão do Corpus STF e Recarga Completa do Banco (14 de maio de 2026)
+
+### 35.1 Motivação
+
+Após a análise da Fase 34, o usuário baixou manualmente 4 arquivos CSV do portal STF cobrindo os anos 2021–2024 (formato `export_acordaos_*.csv`, separador `;`, colunas `Título`/`Relator(a)`). O banco existente continha apenas 3.420 acórdãos (set/2025–mar/2026). Para carregar os novos arquivos, foi necessário:
+
+1. Adaptar o ETL para reconhecer o novo formato de nome e colunas
+2. Recriar o banco do zero (o `iajuris.db` era um ponteiro Git LFS, não um SQLite real)
+3. Recarregar todas as fontes de dados
+
+### 35.2 Problemas encontrados e soluções
+
+**Problema 1: novo formato CSV (separador `;`, colunas `Título`/`Relator(a)`)**
+- Os CSVs antigos usam `,` e `Titulo`/`Relator`; os novos usam `;` e `Título`/`Relator(a)` (com acento e parênteses)
+- **Solução:** `etl/extract.py` ganhou função `_ler_csv()` com auto-detecção de separador (conta ocorrências de `;` vs `,` na primeira linha) e dicionário `_COL_MAP` para normalização
+
+**Problema 2: regex de `_collect_csvs()` não capturava novos nomes**
+- Padrão antigo: `r'^resultados-de-acordaos[\w\-]*\.csv$'`
+- Novos arquivos têm prefixo `export_acordaos_`
+- **Solução:** `etl/load.py` agora usa dois padrões regex na lista `_CSV_NAME_RES` e busca `*.csv` com filtro posterior
+
+**Problema 3: `data/db/iajuris.db` era ponteiro Git LFS**
+- O arquivo tinha 132 bytes — um ponteiro LFS (`version https://git-lfs.github.com/spec/...`)
+- `sqlite3.DatabaseError: file is not a database` ao tentar conectar
+- **Solução:** deletado e recriado com `sqlite3.connect(...).close()`
+
+### 35.3 Resultados da carga
+
+```
+22 CSVs encontrados (18 resultados-de-acordaos*.csv + 4 export_acordaos*.csv)
+Registros extraídos: ~51.000 bruto
+Após deduplicação por Titulo: 38.707
+Após limpeza (transform): 38.706 (9.037 com repercussão geral detectada)
+Registros carregados em jurisprudencia: 38.706
+```
+
+### 35.4 Recarregamento de todas as fontes
+
+Após o banco ter sido recriado vazio (apenas ETL STF roda `DROP + CREATE`), foi necessário recarregar STJ e súmulas:
+
+| Comando | Registros carregados |
+|---|---|
+| `python -m etl.load_teses_stj data/stj/JTSelecao.txt data/db/iajuris.db` | 3.377 |
+| `python etl/load_teses_stj.py data/stj/jurispruConsumidor.txt ... --area="DIREITO DO CONSUMIDOR"` | 100 |
+| `python -m etl.load_sumulas_stj` | 676 |
+| `python -m etl.load_sumulas_vinculantes_stf` | 58 |
+| `python -m etl.generate_embeddings` | em andamento (38.706 + 4.054 docs) |
+
+**Total do corpus pós-fase 35: 42.917 documentos**
+
+### 35.5 Comparação antes/depois
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| Acórdãos STF | 3.420 | 38.706 |
+| Cobertura temporal STF | set/2025–mar/2026 | 2021–2026 (5+ anos) |
+| Teses STJ | 3.377 | 3.477 (+ 100 Consumidor) |
+| Total corpus | 7.531 | 42.917 |
+
+### 35.6 Arquivos criados/modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `etl/extract.py` | Modificado | Auto-detecção de separador CSV + normalização de colunas via `_COL_MAP` |
+| `etl/load.py` | Modificado | `_CSV_NAME_RES` com dois padrões; `glob("*.csv")` com filtro regex |
+| `README.md` | Atualizado | Tabela de corpus atualizada (42.917 documentos) |
+| `DIARIO_TECNICO.md` | Atualizado | Esta entrada |
+
+### 35.7 Estado após a fase 35
+
+- ✅ ETL suporta ambos os formatos de CSV (vírgula/ponto-e-vírgula, colunas antigas/novas)
+- ✅ 38.706 acórdãos STF (2021–2026) no banco
+- ✅ 4.054 teses/súmulas STJ no banco
+- ✅ 58 súmulas vinculantes STF no banco
+- ✅ Geração de embeddings concluída — 38.706 acórdãos STF + 4.054 teses/súmulas STJ vetorizados
+
+---
+
+## Fase 36 — ETL de Acórdãos STJ via Portal de Dados Abertos (15 de maio de 2026)
+
+### 36.1 Motivação
+
+A Fase 34 identificou a ausência de acórdãos STJ com ementa como lacuna crítica. O script `baixar_stj.py` (Playwright) foi criado mas requer execução local com IP residencial. Nesta fase foi descoberta e implementada uma solução muito superior: o **Portal de Dados Abertos do STJ** (`dadosabertos.web.stj.jus.br`) disponibiliza os "Espelhos de Acórdãos" em formato JSON aberto, sem autenticação, sem Cloudflare, sem scraping.
+
+### 36.2 Fonte de dados
+
+**URL:** https://dadosabertos.web.stj.jus.br  
+**Licença:** Creative Commons Attribution (CC-BY)  
+**Formato:** JSON incremental mensal + ZIP com histórico completo  
+**Período disponível:** mai/2022 – mar/2026 (47 meses)
+
+**10 datasets disponíveis (1 por órgão julgador):**
+
+| Dataset (slug) | Órgão |
+|---|---|
+| espelhos-de-acordaos-corte-especial | Corte Especial |
+| espelhos-de-acordaos-primeira-secao | Primeira Seção |
+| espelhos-de-acordaos-segunda-secao | Segunda Seção |
+| espelhos-de-acordaos-terceira-secao | Terceira Seção |
+| espelhos-de-acordaos-primeira-turma | Primeira Turma |
+| espelhos-de-acordaos-segunda-turma | Segunda Turma |
+| espelhos-de-acordaos-terceira-turma | Terceira Turma |
+| espelhos-de-acordaos-quarta-turma | Quarta Turma |
+| espelhos-de-acordaos-quinta-turma | Quinta Turma |
+| espelhos-de-acordaos-sexta-turma | Sexta Turma |
+
+**Estrutura dos arquivos:** cada dataset tem 1 ZIP (histórico completo), 1 CSV (dicionário de dados) e 47 JSONs mensais (incrementais). Nomes no formato `YYYYMMDD.json`.
+
+### 36.3 Campos disponíveis no JSON
+
+| Campo JSON | Campo no banco | Observação |
+|---|---|---|
+| `ministroRelator` | parte da `ementa` | Prefixado como "Rel. X." |
+| `nomeOrgaoJulgador` | `orgao_julgador` | |
+| `ementa` | `ementa` | Campo principal |
+| `teseJuridica` | parte da `ementa` | Anexado ao final (se presente) |
+| `informacoesComplementares` | parte da `ementa` | Anexado ao final (se presente) |
+| `dataDecisao` | `data_julgamento` | Convertido YYYYMMDD → DD/MM/YYYY |
+| `siglaClasse` + `numeroProcesso` | `numero_processo` | Ex: "AgInt nos EREsp 1926749" |
+| `decisao` | `decisao` | Truncado em 3000 chars |
+| `tema` | `repercussao_geral` | 1 se tema repetitivo presente |
+
+### 36.4 Implementação
+
+**Script criado:** `etl/load_acordaos_stj.py`
+
+**Fluxo de execução:**
+1. Consulta API CKAN de cada dataset para obter URLs de download
+2. Baixa arquivos JSON mensais com httpx (streaming, cache em `data/stj/acordaos/`)
+3. Filtra por `dataDecisao >= YYYYMMDD` (padrão: 2022)
+4. Constrói texto de ementa enriquecido (relator + ementa + tese + ICE)
+5. Insere na tabela `jurisprudencia` com `tribunal='STJ'`
+6. Deduplica via conjunto Python em memória (zero duplicatas por numero_processo)
+7. Rebuild do índice FTS5 ao final
+
+**CLI:**
+```bash
+python -m etl.load_acordaos_stj               # 2022+ (padrão)
+python -m etl.load_acordaos_stj --desde 2023  # somente 2023+
+python -m etl.load_acordaos_stj --force        # remove STJ e recarrega
+python -m etl.load_acordaos_stj --dry-run      # lista arquivos, não baixa
+```
+
+### 36.5 Resultado
+
+| Órgão | Registros |
+|---|---|
+| Quinta Turma | 29.385 |
+| Terceira Turma | 22.788 |
+| Quarta Turma | 18.994 |
+| Segunda Turma | 13.215 |
+| Primeira Turma | 9.153 |
+| Primeira Seção | 3.527 |
+| Corte Especial | 3.006 |
+| Segunda Seção | 1.927 |
+| Terceira Seção | 1.403 |
+| Sexta Turma | ~29.000 (retry em andamento — HTTP 520 transitório) |
+| **Total STJ** | **~133.000 acórdãos** |
+
+### 36.6 Corpus após a fase 36
+
+| Fonte | Documentos |
+|---|---|
+| Acórdãos STF (jurisprudencia) | 38.706 |
+| Acórdãos STJ (jurisprudencia) | ~133.000 |
+| Teses/Súmulas STJ (teses_stj) | 4.054 |
+| Súmulas Vinculantes STF | 58 |
+| **Total** | **~175.000** |
+
+### 36.7 Decisões de projeto
+
+- **Ementa enriquecida**: o campo `ementa` combina relator + ementa principal + teseJuridica + informacoesComplementares. Isso torna a busca FTS5 e semântica mais rica sem precisar modificar o schema.
+- **Apenas JSONs mensais (sem ZIP)**: o ZIP histórico inclui decisões pré-2022 (indesejadas). Filtro por data `>= 2022` aplicado na inserção.
+- **Cache local** em `data/stj/acordaos/`: re-execuções pulam arquivos já baixados (idempotente).
+- **Sem schema novo**: acórdãos STJ entram na mesma tabela `jurisprudencia` com `tribunal='STJ'`. A busca existente os retorna junto com STF.
+- **Próximo passo**: gerar embeddings para os ~133k novos registros STJ.
+
+### 36.8 Arquivos criados/modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `etl/load_acordaos_stj.py` | Criado | ETL completo: CKAN API + httpx + SQLite |
+| `README.md` | Atualizado | Corpus, ETL commands, estrutura do projeto |
+| `DIARIO_TECNICO.md` | Atualizado | Esta entrada |
+
+### 36.9 Estado após a fase 36
+
+- ✅ `etl/load_acordaos_stj.py` criado e testado
+- ✅ 103.398 acórdãos STJ (9 órgãos) carregados sem scraping nem Playwright
+- ⏳ Sexta Turma: retry em andamento (HTTP 520 transitório)
+- ⏳ `generate_embeddings` para os novos acórdãos STJ

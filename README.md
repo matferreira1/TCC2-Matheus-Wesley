@@ -51,6 +51,12 @@ Pergunta do usuário
 Reciprocal Rank Fusion (RRF, k=60) — funde rankings lexical + semântico
       │
       ▼
+Re-ranking por bigramas — promove docs com maior cobertura de frases-chave da pergunta
+      │
+      ▼ (opcional via API)
+Filtro de termos obrigatórios (required_terms) — descarta fontes sem os termos especificados
+      │
+      ▼
 Cross-Encoder reranking — pontua pares (query, documento) diretamente
       │
       ▼
@@ -68,10 +74,12 @@ Resposta estruturada + fontes citadas (apenas as correlacionadas com a resposta)
 
 1. A query é expandida com sinônimos jurídicos (`query_expansion.py`) e submetida a **quatro buscas em paralelo** via `asyncio.gather`: FTS5/BM25 e busca semântica (embeddings) sobre acórdãos STF e teses/súmulas STJ.
 2. O **RRF** (Reciprocal Rank Fusion) funde os quatro rankings em até 20 candidatos por tipo.
-3. O **cross-encoder** (`mmarco-mMiniLMv2-L12-H384-v1`) reordena os candidatos pontuando cada par (query, documento) diretamente, selecionando os top-k finais.
-4. As ementas são processadas por `_extract_ementa_payload()`, que prioriza as seções **III. RAZÕES DE DECIDIR** e **IV. DISPOSITIVO**.
-5. O **prompt v6** embute uma linha `Efeito:` em cada documento do contexto (casuístico / precedente qualificado / enunciado persuasivo), instrui a LLM a registrar divergências jurisprudenciais explicitamente em vez de sintetizá-las como consenso, e encerra a resposta com uma "Nota sobre as fontes:" indicando o peso vinculativo dos documentos utilizados.
-6. A resposta é retornada via `POST /api/v1/query` com o texto e a lista de fontes.
+3. O **re-ranking por bigramas** re-ordena os candidatos RRF usando cobertura de frases específicas da pergunta. Score combinado: 55% posição RRF + 45% cobertura de bigramas. Documentos de áreas jurídicas distintas que só compartilham tokens genéricos com a pergunta são rebaixados no pool; documentos que contêm as mesmas frases-chave (ex: "sem grave ameaça") são promovidos. Nenhum candidato é eliminado — apenas reordenado.
+4. (Opcional via API) Se `required_terms` foi informado, o **filtro de termos obrigatórios** descarta candidatos que não contêm todos os termos especificados (substring normalizada, sem acentos). Fallback gracioso: se nenhum candidato passar, os candidatos originais são mantidos.
+5. O **cross-encoder** (`mmarco-mMiniLMv2-L12-H384-v1`) reordena os candidatos pontuando cada par (query, documento) diretamente, selecionando os top-k finais.
+5. As ementas são processadas por `_extract_ementa_payload()`, que prioriza as seções **III. RAZÕES DE DECIDIR** e **IV. DISPOSITIVO**.
+6. O **prompt v7** embute uma linha `Efeito:` em cada documento do contexto (casuístico / precedente qualificado / enunciado persuasivo) e instrui a LLM a registrar divergências jurisprudenciais explicitamente em vez de sintetizá-las como consenso.
+7. A resposta é retornada via `POST /api/v1/query` com o texto e a lista de fontes.
 
 ---
 
@@ -79,11 +87,12 @@ Resposta estruturada + fontes citadas (apenas as correlacionadas com a resposta)
 
 | Fonte | Conteúdo | Documentos |
 |---|---|---|
-| STF — Súmulas Vinculantes | SV 1 a SV 59 (vinculantes constitucionais — art. 103-A CF) | 59 |
-| STF — Portal de pesquisa | Acórdãos exportados em CSV (set/2025 – mar/2026) | 3.420 |
-| STJ — Jurisprudência em Teses | Teses consolidadas por edição temática | 3.378 |
+| STF — Súmulas Vinculantes | SV 1 a SV 58 (vinculantes constitucionais — art. 103-A CF) | 58 |
+| STF — Portal de pesquisa | Acórdãos exportados em CSV (2021–2026, 22 arquivos) | 38.706 |
+| STJ — Acórdãos (Espelhos) | Acórdãos com ementa — 10 órgãos julgadores (mai/2022–mar/2026) | 127.086 |
+| STJ — Jurisprudência em Teses | Teses consolidadas por edição temática | 3.477 |
 | STJ — Súmulas | Súmulas do STJ | 676 |
-| **Total** | | **7.533** |
+| **Total** | | **170.582** |
 
 Todos os documentos possuem embedding vetorial (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dims) armazenado como BLOB no SQLite, habilitando a busca semântica híbrida.
 
@@ -173,7 +182,11 @@ Os CSVs de acórdãos do STF devem estar em `data/raw/`. Os arquivos STJ (`JTSel
 # 4. Súmulas Vinculantes STF (arquivo data/stf/sumulas_vinculantes.txt já incluso)
 .venv/bin/python -m etl.load_sumulas_vinculantes_stf
 
-# 5. Gerar embeddings (necessário para busca semântica — inclui SVs)
+# 5. Acórdãos STJ com ementa (Portal de Dados Abertos — 2022+)
+.venv/bin/python -m etl.load_acordaos_stj               # carga completa
+.venv/bin/python -m etl.load_acordaos_stj --desde 2023  # somente a partir de 2023
+
+# 6. Gerar embeddings (necessário para busca semântica — inclui SVs)
 .venv/bin/python -m etl.generate_embeddings
 ```
 
@@ -300,6 +313,7 @@ iajuris/
 │   ├── load_teses_stj.py     # Parser e carga das teses STJ (+ load_area())
 │   ├── load_sumulas_stj.py   # Parser e carga das súmulas STJ
 │   ├── load_sumulas_vinculantes_stf.py  # Parser e carga das SVs STF
+│   ├── load_acordaos_stj.py  # Download e carga de acórdãos STJ (Portal Dados Abertos)
 │   └── generate_embeddings.py# Vetorização do corpus (MiniLM → BLOB SQLite)
 │
 ├── load_tests/
@@ -359,9 +373,9 @@ iajuris/
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | Modelo Groq |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Modelo Ollama |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | URL do servidor Ollama |
-| `RAG_TOP_K` | `6` | Acórdãos STF retornados após reranking |
-| `RAG_TOP_K_TESES` | `3` | Teses/súmulas STJ retornadas após reranking |
-| `RAG_MAX_EMENTA_CHARS` | `1500` | Limite de caracteres por ementa (extração inteligente de seções) |
+| `RAG_TOP_K` | `8` | Acórdãos (STF + STJ) retornados após reranking |
+| `RAG_TOP_K_TESES` | `2` | Teses/súmulas STJ retornadas após reranking |
+| `RAG_MAX_EMENTA_CHARS` | `2500` | Limite de caracteres por ementa (extração inteligente de seções) |
 | `RERANKER_ENABLED` | `true` | Ativa cross-encoder pós-RRF (desativar para menor latência em CPU) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Limite de requisições/min por IP em `/query` (aumentar para testes de carga) |
 | `DEBUG` | `false` | Habilita logging detalhado |

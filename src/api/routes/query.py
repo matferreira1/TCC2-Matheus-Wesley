@@ -64,7 +64,11 @@ async def handle_query(
         request_id, payload.question,
     )
     try:
-        resp = await rag_service.answer(conn, payload.question)
+        resp = await rag_service.answer(
+            conn,
+            payload.question,
+            required_terms=payload.required_terms,
+        )
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,

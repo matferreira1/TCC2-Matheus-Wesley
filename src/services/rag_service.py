@@ -7,6 +7,7 @@ import logging
 import re
 import textwrap
 import time
+import unicodedata
 from dataclasses import dataclass, field
 
 import aiosqlite
@@ -39,15 +40,16 @@ class RagResponse:
 async def answer(
     conn: aiosqlite.Connection,
     question: str,
+    required_terms: list[str] | None = None,
 ) -> RagResponse:
-    """Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → prompt → LLM."""
+    """Executa o pipeline RAG híbrido: FTS5 + semântica → RRF → filtro → prompt → LLM."""
     logger.info("━━━━ Nova consulta RAG ━━━━")
     logger.info("Pergunta: %s", question)
     inicio = time.perf_counter()
 
     # Busca paralela: FTS5 (lexical) + semântica em acórdãos, teses e SVs
-    _FETCH = 15           # candidatos de cada fonte antes do RRF
-    _RRF_CANDIDATES = 20  # candidatos pós-RRF enviados ao cross-encoder
+    _FETCH = 20           # candidatos de cada fonte antes do RRF
+    _RRF_CANDIDATES = 25  # candidatos pós-RRF enviados ao cross-encoder
     _FETCH_SV = 8         # SVs candidatas antes do RRF (corpus pequeno: ~60 docs)
     (
         fts5_acordaos,
@@ -75,6 +77,19 @@ async def answer(
     candidates_sv = semantic_service.rrf_sv(
         fts5_sv, sem_sv, top_n=3
     )
+
+    # Bigram coverage re-ranking: promove candidatos que cobrem mais frases específicas
+    # da pergunta, reduzindo docs de áreas distintas que só compartilham tokens genéricos.
+    # Aplicado antes do cross-encoder para melhorar a qualidade do pool de entrada.
+    candidates_acordaos = _rerank_by_bigram_coverage(question, candidates_acordaos)
+    candidates_teses = _rerank_by_bigram_coverage(question, candidates_teses)
+
+    # Filtro de termos obrigatórios (parâmetro API opcional): descarta candidatos
+    # que não contêm todos os termos especificados explicitamente pelo chamador.
+    if required_terms:
+        candidates_acordaos = _apply_required_terms_filter(candidates_acordaos, required_terms)
+        candidates_teses = _apply_required_terms_filter(candidates_teses, required_terms)
+        candidates_sv = _apply_required_terms_filter(candidates_sv, required_terms)
 
     # Cross-encoder reranking: pontua cada par (query, doc) e seleciona top_k
     if settings.reranker_enabled:
@@ -206,9 +221,10 @@ def _extract_ementa_payload(ementa: str, max_chars: int = 1500) -> str:
     if 'IV' in positions:
         parts.append(ementa[positions['IV']:].strip())
 
-    # Fallback: ementa sem estrutura de seções romanas — trunca com shorten
+    # Fallback: ementa sem estrutura de seções romanas (ex: acórdãos STJ).
+    # Preserva quebras de linha — importante para o formato "Rel. X.\n\nEMENTA\n\nTESE JURÍDICA: ..."
     if 'III' not in positions and 'IV' not in positions:
-        return textwrap.shorten(ementa, width=max_chars, placeholder='...')
+        return ementa[:max_chars - 3] + "..." if len(ementa) > max_chars else ementa
 
     extracted = ' [...] '.join(p for p in parts if p)
 
@@ -228,6 +244,143 @@ def _extract_ementa_payload(ementa: str, max_chars: int = 1500) -> str:
             extracted = textwrap.shorten(extracted, width=max_chars, placeholder='...')
 
     return extracted
+
+
+def _normalize_text(text: str) -> str:
+    """Lowercase + remove diacríticos para comparação lexical insensível a acentos."""
+    return unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode().lower()
+
+
+# Stopwords normalizadas (sem acentos) — usadas no tokenizador de bigramas
+_BIGRAM_STOPWORDS = frozenset({
+    "o", "a", "os", "as", "um", "uma", "de", "do", "da", "dos", "das",
+    "em", "no", "na", "nos", "nas", "por", "para", "com", "que", "se",
+    "ao", "aos", "e", "ou", "mas", "mais", "nao", "isso", "isto", "aqui",
+    "ali", "ja", "tambem", "segundo", "seu", "sua", "seus", "suas",
+    "me", "te", "lhe", "eh", "ha", "ate", "ser", "ter",
+})
+
+
+def _tokenize_for_bigrams(question: str) -> list[str]:
+    """Extrai tokens normalizados da pergunta para formação de bigramas."""
+    normalized = _normalize_text(question)
+    tokens = re.sub(r'[^\w\s]', ' ', normalized).split()
+    return [t for t in tokens if t not in _BIGRAM_STOPWORDS and len(t) > 2]
+
+
+def _get_doc_text(doc) -> str:
+    """Retorna o texto principal de qualquer tipo de documento."""
+    if isinstance(doc, search_service.SearchResult):
+        return doc.ementa
+    if isinstance(doc, search_service.TesesResult):
+        return doc.tese_texto
+    if isinstance(doc, search_service.SumulaVinculanteResult):
+        return doc.enunciado
+    return ""
+
+
+def _rerank_by_bigram_coverage(question: str, docs: list) -> list:
+    """
+    Re-ordena candidatos pós-RRF usando cobertura de bigramas — Opção 3 (gate + soft rerank).
+
+    Duas etapas:
+
+    1. Gate hard (cobertura == 0): descarta candidatos que não contêm nenhum
+       bigrama da pergunta — documentos de áreas completamente alheias ao tema
+       (ex.: "prestação de contas" numa query sobre fraude bancária).
+       Fallback: se todos tiverem cobertura zero, o gate é ignorado para não
+       esvaziar o pool.
+
+    2. Soft rerank: 40% posição RRF  +  60% cobertura de bigramas.
+       O peso maior na cobertura permite que um documento de posição inferior
+       com frases-chave específicas (ex.: "sem grave ameaça") ultrapasse um
+       documento de posição superior com cobertura baixa.
+       As posições originais do RRF são preservadas no cálculo (não re-indexadas
+       após o gate), mantendo o sinal de qualidade do RRF.
+    """
+    if len(docs) <= 1:
+        return docs
+
+    tokens = _tokenize_for_bigrams(question)
+    if len(tokens) < 2:
+        return docs
+
+    bigrams = [f"{tokens[i]} {tokens[i + 1]}" for i in range(len(tokens) - 1)]
+
+    # Calcula cobertura preservando posição original do RRF
+    with_coverage = [
+        (pos, doc, sum(1 for bg in bigrams if bg in _normalize_text(_get_doc_text(doc))) / len(bigrams))
+        for pos, doc in enumerate(docs)
+    ]
+
+    # Gate hard: remove cobertura == 0 (sem nenhum bigrama da query no texto)
+    filtered = [(pos, doc, cov) for pos, doc, cov in with_coverage if cov > 0.0]
+    removed = len(with_coverage) - len(filtered)
+    if not filtered:
+        filtered = with_coverage  # fallback: todos têm cobertura zero
+        removed = 0
+    if removed:
+        logger.info(
+            "_rerank_by_bigram_coverage: gate removeu %d doc(s) com cobertura 0%%", removed
+        )
+
+    # Soft rerank: 40% pos RRF + 60% cobertura (posições originais mantidas)
+    scored = [
+        (0.40 * (1.0 / (pos + 1)) + 0.60 * cov, pos, doc)
+        for pos, doc, cov in filtered
+    ]
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    logger.debug(
+        "_rerank_by_bigram_coverage: %d bigramas | gate=%d removidos | top-3 scores: %s",
+        len(bigrams), removed,
+        [f"{s:.3f}" for s, _, _ in scored[:3]],
+    )
+    return [d for _, _, d in scored]
+
+
+def _apply_required_terms_filter(
+    docs: list,
+    required_terms: list[str],
+) -> list:
+    """
+    Filtra candidatos que não contêm todos os termos obrigatórios.
+
+    A comparação é feita após normalização (minúsculas, sem acentos), então
+    "prisão domiciliar" casa com "prisao domiciliar" no texto do documento.
+
+    Fallback: se nenhum documento passar (todos foram eliminados), retorna a
+    lista original para evitar contexto vazio no prompt.
+    """
+    if not required_terms or not docs:
+        return docs
+
+    norm_terms = [_normalize_text(t) for t in required_terms if t.strip()]
+    if not norm_terms:
+        return docs
+
+    def _doc_text(doc) -> str:
+        if isinstance(doc, search_service.SearchResult):
+            return _normalize_text(doc.ementa)
+        if isinstance(doc, search_service.TesesResult):
+            return _normalize_text(doc.tese_texto)
+        if isinstance(doc, search_service.SumulaVinculanteResult):
+            return _normalize_text(doc.enunciado)
+        return ""
+
+    kept = [d for d in docs if all(t in _doc_text(d) for t in norm_terms)]
+
+    if not kept:
+        logger.info(
+            "_apply_required_terms_filter: nenhum doc passou — retornando lista original (fallback) | termos=%s",
+            required_terms,
+        )
+        return docs
+
+    logger.info(
+        "_apply_required_terms_filter: %d/%d docs retidos | termos=%s",
+        len(kept), len(docs), required_terms,
+    )
+    return kept
 
 
 def _sanitize_doc_text(text: str) -> str:
@@ -269,15 +422,24 @@ def _build_prompt(
             _extract_ementa_payload(s.ementa, max_chars=settings.rag_max_ementa_chars)
         )
         orgao = f" | {s.orgao_julgador}" if s.orgao_julgador else ""
-        if s.repercussao_geral:
-            efeito = (
-                "decisão com repercussão geral — vinculante para os demais órgãos do "
-                "Poder Judiciário (art. 927, III, CPC)."
-            )
+        if s.tribunal == "STJ":
+            if s.repercussao_geral:
+                efeito = (
+                    "recurso repetitivo — vinculante para os tribunais de origem "
+                    "(art. 927, III, CPC; Res. STJ 8/2008)."
+                )
+            else:
+                efeito = "precedente persuasivo — consolida a interpretação da legislação federal."
         else:
-            efeito = "decisão casuística — persuasiva, não vinculante."
+            if s.repercussao_geral:
+                efeito = (
+                    "decisão com repercussão geral — vinculante para os demais órgãos do "
+                    "Poder Judiciário (art. 927, III, CPC)."
+                )
+            else:
+                efeito = "decisão casuística — persuasiva, não vinculante."
         context_parts.append(
-            f"[Acórdão STF {i + 1}] {s.numero_processo}{orgao}\n"
+            f"[Acórdão {s.tribunal} {i + 1}] {s.numero_processo}{orgao}\n"
             f"Efeito: {efeito}\n"
             f"{payload}"
         )
@@ -306,7 +468,13 @@ def _build_prompt(
         if has_sv:
             partes.append("súmulas vinculantes do STF")
         if has_acordaos:
-            partes.append("acórdãos do STF")
+            tribunais_acordaos = {s.tribunal for s in sources}
+            if "STF" in tribunais_acordaos and "STJ" in tribunais_acordaos:
+                partes.append("acórdãos do STF e do STJ")
+            elif "STJ" in tribunais_acordaos:
+                partes.append("acórdãos do STJ")
+            else:
+                partes.append("acórdãos do STF")
         if has_teses:
             partes.append("teses consolidadas do STJ")
         fontes_desc = " e ".join(partes) if partes else "documentos disponíveis"
@@ -327,8 +495,11 @@ def _build_prompt(
         "   - Súmula Vinculante STF: cite como 'SV N/STF', usando o número do rótulo [Súmula Vinculante STF N].\n"
         "     Exemplo: '(SV 11/STF; SV 14/STF)'\n"
         "   - Acórdão STF: cite SOMENTE o número do processo (ex: HC 263552 AgR), que está na linha\n"
-        "     imediatamente após o rótulo [Acórdão STF N]. NUNCA use o rótulo [Acórdão STF N] como citação.\n"
-        "     Exemplo: '(HC 263552 AgR; HC 264610 AgR)'\n"
+        "     imediatamente após o rótulo [Acórdão STF N]. NUNCA use o rótulo como citação.\n"
+        "     Exemplo: '(HC 263552 AgR; RE 1.234.567)'\n"
+        "   - Acórdão STJ: cite SOMENTE o número do processo (ex: REsp 1.926.749 ou AgInt nos EREsp 1926749),\n"
+        "     que está na linha imediatamente após o rótulo [Acórdão STJ N]. NUNCA use o rótulo como citação.\n"
+        "     Exemplo: '(REsp 1.234.567; HC 800.000)'\n"
         "   - Tese STJ: copie o identificador COMPLETO que aparece após o rótulo [Tese STJ N],\n"
         "     incluindo área, edição e número da tese. NUNCA use formas abreviadas.\n"
         "     Exemplo: '(DIREITO CIVIL — Ed. 143: PLANO DE SAÚDE - III (Tese 3))'\n"
