@@ -3,11 +3,11 @@ Busca semântica por similaridade cosseno + Reciprocal Rank Fusion (RRF).
 
 Estratégia:
   1. Embeddings gerados offline (etl/generate_embeddings.py) e armazenados
-     como BLOB float32 nas colunas `embedding` de jurisprudencia e teses_stj.
-  2. Na primeira chamada, os vetores são carregados em memória como arrays
-     NumPy (~11 MB para o corpus completo).
-  3. A busca é uma multiplicação matricial (cosine similarity) — <1 ms para
-     7.000 documentos.
+     como BLOB float16 nas colunas `embedding` de jurisprudencia e teses_stj.
+  2. Na primeira chamada, apenas id+embedding são carregados em memória como
+     arrays NumPy (~121 MB para 165k acórdãos). Textos das ementas NÃO ficam
+     em cache — são buscados por ID só para os top-k resultados (≤20 docs).
+  3. A busca é uma multiplicação matricial (cosine similarity) — <1 ms.
   4. RRF funde o ranking lexical (FTS5) com o semântico em lista única.
 
 Fallback: se nenhum embedding estiver no banco, retorna lista vazia e o
@@ -31,7 +31,8 @@ MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 # Singletons — carregados na primeira chamada
 _model = None
-_acordao_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
+# Apenas id + vetor em cache; textos buscados por ID on-demand para top-k
+_acordao_cache: tuple[list[int], np.ndarray] | None = None
 _teses_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
 _sv_cache: tuple[list[int], list[tuple], np.ndarray] | None = None
 
@@ -86,14 +87,14 @@ def _deserialize(blob: bytes) -> np.ndarray:
 
 async def _load_acordao_cache(
     conn: aiosqlite.Connection,
-) -> tuple[list[int], list[tuple], np.ndarray] | None:
+) -> tuple[list[int], np.ndarray] | None:
+    """Carrega apenas id+embedding em memória (sem textos) para economizar RAM."""
     global _acordao_cache
     if _acordao_cache is not None:
         return _acordao_cache
 
     cur = await conn.execute(
-        "SELECT id, tribunal, numero_processo, ementa, orgao_julgador, repercussao_geral, data_julgamento, embedding "
-        "FROM jurisprudencia WHERE embedding IS NOT NULL"
+        "SELECT id, embedding FROM jurisprudencia WHERE embedding IS NOT NULL"
     )
     rows = await cur.fetchall()
     if not rows:
@@ -104,13 +105,31 @@ async def _load_acordao_cache(
         return None
 
     ids = [r[0] for r in rows]
-    # meta: (tribunal, numero_processo, ementa, orgao_julgador, repercussao_geral, data_julgamento)
-    meta = [(r[1] or "", r[2] or "", r[3] or "", r[4] or "", bool(r[5]), r[6] or "") for r in rows]
-    vectors = np.stack([_deserialize(r[7]) for r in rows])  # (N, 384)
+    vectors = np.stack([_deserialize(r[1]) for r in rows])  # (N, 384)
 
-    _acordao_cache = (ids, meta, vectors)
-    logger.info("Cache semântico: %d acórdãos carregados.", len(ids))
+    _acordao_cache = (ids, vectors)
+    logger.info("Cache semântico: %d acórdãos carregados (só vetores, sem texto).", len(ids))
     return _acordao_cache
+
+
+async def _fetch_acordao_meta_batch(
+    conn: aiosqlite.Connection,
+    doc_ids: list[int],
+) -> dict[int, tuple]:
+    """Busca metadados completos (incluindo ementa) para uma lista de IDs."""
+    if not doc_ids:
+        return {}
+    placeholders = ",".join("?" * len(doc_ids))
+    cur = await conn.execute(
+        f"SELECT id, tribunal, numero_processo, ementa, orgao_julgador, repercussao_geral, data_julgamento "
+        f"FROM jurisprudencia WHERE id IN ({placeholders})",
+        doc_ids,
+    )
+    rows = await cur.fetchall()
+    return {
+        r[0]: (r[1] or "", r[2] or "", r[3] or "", r[4] or "", bool(r[5]), r[6] or "")
+        for r in rows
+    }
 
 
 async def _load_teses_cache(
@@ -202,22 +221,27 @@ async def search_semantic(
     if cache is None:
         return []
 
-    ids, meta, vectors = cache
+    ids, vectors = cache
     query_vec = _embed_query(query)
     top = _top_k_by_cosine(query_vec, vectors, top_k)
 
+    top_ids = [ids[idx] for idx, _ in top]
+    scores = {ids[idx]: score for idx, score in top}
+    meta_map = await _fetch_acordao_meta_batch(conn, top_ids)
+
     return [
         SearchResult(
-            id=ids[idx],
-            tribunal=meta[idx][0],
-            numero_processo=meta[idx][1],
-            ementa=meta[idx][2],
-            orgao_julgador=meta[idx][3],
-            repercussao_geral=meta[idx][4],
-            data_julgamento=meta[idx][5],
-            rank=-score,  # negativo: convenção do FTS5 (menor rank = mais relevante)
+            id=doc_id,
+            tribunal=meta_map[doc_id][0],
+            numero_processo=meta_map[doc_id][1],
+            ementa=meta_map[doc_id][2],
+            orgao_julgador=meta_map[doc_id][3],
+            repercussao_geral=meta_map[doc_id][4],
+            data_julgamento=meta_map[doc_id][5],
+            rank=-scores[doc_id],
         )
-        for idx, score in top
+        for doc_id in top_ids
+        if doc_id in meta_map
     ]
 
 

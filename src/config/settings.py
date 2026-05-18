@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     reranker_enabled: bool = True   # desabilitar para usar só RRF (mais rápido)
 
     # ------------------------------------------------------------------
+    # Startup
+    # ------------------------------------------------------------------
+    run_tests_on_startup: bool = False  # ativar só em dev: RUN_TESTS_ON_STARTUP=true
+
+    # ------------------------------------------------------------------
     # Rate limiting
     # ------------------------------------------------------------------
     rate_limit_per_minute: int = 10  # aumentar para testes de carga (ex.: 200)

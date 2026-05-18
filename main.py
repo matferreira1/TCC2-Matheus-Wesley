@@ -100,7 +100,10 @@ async def lifespan(app: FastAPI):
     """
     # ── Startup ──────────────────────────────────────────────────────
     logger.info("Iniciando IAJuris...")
-    await _run_tests()
+    if get_settings().run_tests_on_startup:
+        await _run_tests()
+    else:
+        logger.info("Testes no startup desabilitados (RUN_TESTS_ON_STARTUP=false).")
     await open_db()
     await init_db()
     logger.info("Banco de dados pronto. Servidor disponível.")

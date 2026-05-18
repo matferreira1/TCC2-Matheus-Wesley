@@ -376,7 +376,8 @@ iajuris/
 | `RAG_TOP_K` | `8` | Acórdãos (STF + STJ) retornados após reranking |
 | `RAG_TOP_K_TESES` | `2` | Teses/súmulas STJ retornadas após reranking |
 | `RAG_MAX_EMENTA_CHARS` | `2500` | Limite de caracteres por ementa (extração inteligente de seções) |
-| `RERANKER_ENABLED` | `true` | Ativa cross-encoder pós-RRF (desativar para menor latência em CPU) |
+| `RERANKER_ENABLED` | `true` | Ativa cross-encoder pós-RRF (desativar economiza ~300 MB RAM em CPU limitado) |
+| `RUN_TESTS_ON_STARTUP` | `false` | Executa pytest no startup (ativar só em dev; custa ~200 MB extras durante init) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Limite de requisições/min por IP em `/query` (aumentar para testes de carga) |
 | `DEBUG` | `false` | Habilita logging detalhado |
 

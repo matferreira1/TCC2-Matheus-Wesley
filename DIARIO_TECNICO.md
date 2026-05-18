@@ -3431,5 +3431,60 @@ Margem segura para servidor com 2 GB de RAM.
 - ✅ `etl/convert_to_float16.py` criado para conversão dos BLOBs existentes
 - ✅ Cache SQLite reduzido de 64 MB para 16 MB
 - ✅ 223 testes passando
-- ⏳ `generate_embeddings` rodando (165k acórdãos, ~58 min restantes quando iniciada esta fase)
-- ⏳ `convert_to_float16` aguardando embeddings terminarem (rodará automaticamente em background)
+- ✅ `generate_embeddings` concluído — todos os 165.792 acórdãos têm embedding float16
+
+---
+
+## Fase 38 — Otimização de RAM: remoção de textos do cache semântico (18 de maio de 2026)
+
+### 38.1 Problema
+
+Após a carga completa do corpus STJ (165.792 acórdãos), a aplicação passou a dar erro 502 no servidor de deploy (2 GB RAM). O comportamento mudou drasticamente em relação à Fase 37 porque:
+
+- A Fase 37 estimou RAM em ~688 MB pico — porém com 7.474 documentos.
+- Com 165.792 documentos, `_load_acordao_cache()` passou a fazer `fetchall()` de todas as linhas incluindo texto completo das ementas (avg 1.695 chars), mantendo esses textos permanentemente em memória.
+
+### 38.2 Diagnóstico de RAM
+
+| Componente | Antes (165k docs) | Depois (fix) |
+|---|---|---|
+| `fetchall()` pico temporário | 437 MB | 123 MB |
+| `meta[]` texto ementas em cache (permanente) | **268 MB** | **0 MB** |
+| numpy embeddings float16 (permanente) | 121 MB | 121 MB |
+| sentence-transformers model | ~420 MB | ~420 MB |
+| CrossEncoder model | ~300 MB | ~300 MB |
+| Python/FastAPI/uvicorn base | ~150 MB | ~150 MB |
+| **Total estimado (pico na 1ª query)** | **~1.696 MB** | **~1.114 MB** |
+
+### 38.3 Solução Implementada
+
+**Mudança principal (`semantic_service.py`):**
+
+`_load_acordao_cache()` passou a carregar apenas `id` e `embedding` em memória (sem nenhum texto). Após o cálculo de similaridade cosseno, os metadados (tribunal, ementa, etc.) são buscados no SQLite apenas para os top-k resultados (≤20 IDs), via nova função `_fetch_acordao_meta_batch()`.
+
+Economia: ~268 MB permanentes + ~314 MB no pico do `fetchall()` = **~580 MB** recuperados.
+
+**Mudança secundária (`settings.py` + `main.py`):**
+
+Adicionada configuração `RUN_TESTS_ON_STARTUP` (padrão `false`). O pytest no startup é um subprocesso Python (~200 MB extra) que executa em paralelo com o processo principal durante a inicialização, aumentando o pico de memória no momento mais crítico.
+
+### 38.4 Trade-offs
+
+- **Latência**: A busca semântica agora faz uma query SQL adicional por requisição (buscar metadata dos top-k). Porém essa query é `WHERE id IN (?)` com ≤20 IDs — menos de 1 ms em SQLite com WAL.
+- **Qualidade**: Sem impacto — o ranking cosine usa apenas os vetores; os textos são buscados após a seleção.
+- **Pytest no startup**: Em desenvolvimento, definir `RUN_TESTS_ON_STARTUP=true` para restaurar o comportamento anterior. Em produção, rodar `pytest tests/` manualmente antes do deploy.
+
+### 38.5 Arquivos Modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `src/services/semantic_service.py` | Atualizado | `_load_acordao_cache` só carrega `id+embedding`; nova `_fetch_acordao_meta_batch` |
+| `src/config/settings.py` | Atualizado | Nova opção `run_tests_on_startup` (padrão `false`) |
+| `main.py` | Atualizado | `_run_tests()` só executado se `run_tests_on_startup=true` |
+
+### 38.6 Estado Após a Fase 38
+
+- ✅ `_load_acordao_cache` não armazena texto das ementas em RAM
+- ✅ `_fetch_acordao_meta_batch` busca metadata on-demand para top-k
+- ✅ `RUN_TESTS_ON_STARTUP=false` por padrão (produção não roda pytest no startup)
+- ✅ 223 testes passando
