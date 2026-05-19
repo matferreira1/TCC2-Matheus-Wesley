@@ -3488,3 +3488,89 @@ Adicionada configuração `RUN_TESTS_ON_STARTUP` (padrão `false`). O pytest no 
 - ✅ `_fetch_acordao_meta_batch` busca metadata on-demand para top-k
 - ✅ `RUN_TESTS_ON_STARTUP=false` por padrão (produção não roda pytest no startup)
 - ✅ 223 testes passando
+
+---
+
+## Fase 39 — Otimizações de performance: cross-encoder batching, warm-up e SQLite (19 de maio de 2026)
+
+### 39.1 Problema
+
+A latência por query estava alta (~10–20 s). Três gargalos identificados:
+
+1. **Cross-encoder chamado 6 vezes por query** — cada `model.predict()` tem overhead fixo de tokenização e setup de inferência. O pipeline fazia 3 chamadas antes da LLM (`rerank` para acórdãos, teses e SVs) e 3 depois (`filter_by_answer` para cada tipo), totalizando ~64 pares em 6 inferências separadas.
+2. **Cold start na primeira query** — MiniLM, CrossEncoder e os 165k vetores eram carregados de forma lazy (na primeira requisição), gerando 20–30 s de latência visível ao usuário.
+3. **Cache SQLite de 16 MB** para um banco de 949 MB — o SQLite precisava ler muito do disco em queries FTS5 sobre 165k documentos.
+
+### 39.2 Soluções Implementadas
+
+**A) `rerank_service.py` — `rerank_multi` e `filter_by_answer_multi`**
+
+Duas novas funções consolidam todos os pares (query, doc) de diferentes grupos (acórdãos, teses, SVs) numa única chamada `model.predict()`, em vez de 3 chamadas separadas:
+
+```python
+# Antes: 3 chamadas (~3×overhead de tokenização)
+sources       = rerank_service.rerank(question, candidates_acordaos, top_n=6)
+sources_teses = rerank_service.rerank(question, candidates_teses, top_n=3)
+sources_sv    = rerank_service.rerank(question, candidates_sv, top_n=2)
+
+# Depois: 1 chamada
+sources, sources_teses, sources_sv = rerank_service.rerank_multi(
+    question,
+    [(candidates_acordaos, 6), (candidates_teses, 3), (candidates_sv, 2)],
+)
+```
+
+Idem para `filter_by_answer_multi`. O total cai de 6 para 2 chamadas por query.
+
+**B) `rag_service.py` — `_RRF_CANDIDATES` reduzido de 25 para 15**
+
+O cross-encoder recebia 25 candidatos por tipo. Com RRF + bigram coverage já filtrando o pool, 15 candidatos mantêm a mesma qualidade com 40% menos pares para pontuar.
+
+**C) `main.py` — `_warmup_models()`**
+
+Nova função de warm-up executada no startup (após `init_db()`):
+- Carrega o cache de embeddings de acórdãos e teses do SQLite (`_load_acordao_cache`, `_load_teses_cache`)
+- Carrega MiniLM e CrossEncoder via `asyncio.to_thread` (evita bloquear o event loop)
+
+A primeira query não sente mais o custo de cold start.
+
+**D) `connection.py` — PRAGMAs SQLite**
+
+| PRAGMA | Antes | Depois |
+|---|---|---|
+| `cache_size` | -16384 (16 MB) | -65536 (64 MB) |
+| `mmap_size` | não configurado | 268435456 (256 MB) |
+
+O `mmap_size` permite que o kernel mapeie o arquivo do banco em memória virtual, eliminando system calls de `read()` para páginas já acessadas.
+
+### 39.3 Ganho Estimado
+
+| Otimização | Ganho por query |
+|---|---|
+| Cross-encoder batching (6→2 chamadas) | 3–7 s |
+| `_RRF_CANDIDATES` 25→15 | 1–2 s |
+| Cache SQLite 16→64 MB + mmap | 0,5–2 s |
+| Warm-up no startup | elimina 20–30 s na 1ª query |
+
+### 39.4 Trade-offs
+
+- **Qualidade**: `_RRF_CANDIDATES` 25→15 tem impacto mínimo — o RRF e o bigram coverage já concentram os melhores candidatos nas primeiras posições. O cross-encoder continua vendo os documentos mais relevantes.
+- **Startup mais lento**: O warm-up adiciona ~20–30 s ao tempo de boot (carregamento dos modelos e vetores). Aceitável pois esse custo estava sendo pago na primeira query pelo usuário.
+- **RAM do mmap**: O `mmap_size=256 MB` não significa 256 MB extras alocados — o kernel gerencia o mapeamento e só carrega páginas acessadas.
+
+### 39.5 Arquivos Modificados
+
+| Arquivo | Ação | Descrição |
+|---|---|---|
+| `src/services/rerank_service.py` | Atualizado | `rerank_multi()` e `filter_by_answer_multi()` adicionados |
+| `src/services/rag_service.py` | Atualizado | Usa `rerank_multi` e `filter_by_answer_multi`; `_RRF_CANDIDATES` 25→15 |
+| `src/database/connection.py` | Atualizado | `cache_size` 16→64 MB; `mmap_size` 256 MB |
+| `main.py` | Atualizado | `_warmup_models()` executado no startup |
+
+### 39.6 Estado Após a Fase 39
+
+- ✅ Cross-encoder: 6 chamadas por query → 2 chamadas (rerank + filter em batch único)
+- ✅ `_RRF_CANDIDATES` reduzido de 25 para 15
+- ✅ Cache SQLite: 16 MB → 64 MB; mmap_size: 256 MB
+- ✅ Warm-up no startup elimina cold start da primeira query
+- ✅ 223 testes passando

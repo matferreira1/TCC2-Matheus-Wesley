@@ -42,6 +42,32 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+async def _warmup_models() -> None:
+    """
+    Pré-carrega modelos ML e cache de embeddings antes da primeira query.
+
+    Sem warm-up, a primeira requisição carrega o MiniLM (~120 MB) + CrossEncoder
+    (~120 MB) + 165k vetores do SQLite — latência de 20–30 s visível ao usuário.
+    Executado no startup, esse custo fica invisível.
+    """
+    import src.database.connection as _conn_mod
+    from src.services import semantic_service, rerank_service
+
+    conn = _conn_mod._db
+    if conn is not None:
+        logger.info("Warm-up: carregando cache de embeddings do banco...")
+        await semantic_service._load_acordao_cache(conn)
+        await semantic_service._load_teses_cache(conn)
+
+    logger.info("Warm-up: carregando modelo de embeddings (MiniLM)...")
+    await asyncio.to_thread(semantic_service._get_model)
+
+    logger.info("Warm-up: carregando cross-encoder...")
+    await asyncio.to_thread(rerank_service._get_model)
+
+    logger.info("Warm-up concluído — primeira query sem latência de cold start.")
+
+
 async def _run_tests() -> bool:
     """
     Executa a suite de testes via pytest como subprocesso e loga cada linha.
@@ -106,6 +132,7 @@ async def lifespan(app: FastAPI):
         logger.info("Testes no startup desabilitados (RUN_TESTS_ON_STARTUP=false).")
     await open_db()
     await init_db()
+    await _warmup_models()
     logger.info("Banco de dados pronto. Servidor disponível.")
 
     yield  # aplicação em execução

@@ -24,6 +24,7 @@ env/
 data/raw/*.csv
 data/raw/*.zip
 data/raw/*.json
+data/stj/acordaos/
 
 # ─── IDEs / Editores ───────────────────────────
 .vscode/

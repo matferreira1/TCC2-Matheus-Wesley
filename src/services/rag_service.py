@@ -49,7 +49,7 @@ async def answer(
 
     # Busca paralela: FTS5 (lexical) + semântica em acórdãos, teses e SVs
     _FETCH = 20           # candidatos de cada fonte antes do RRF
-    _RRF_CANDIDATES = 25  # candidatos pós-RRF enviados ao cross-encoder
+    _RRF_CANDIDATES = 15  # candidatos pós-RRF enviados ao cross-encoder
     _FETCH_SV = 8         # SVs candidatas antes do RRF (corpus pequeno: ~60 docs)
     (
         fts5_acordaos,
@@ -91,11 +91,16 @@ async def answer(
         candidates_teses = _apply_required_terms_filter(candidates_teses, required_terms)
         candidates_sv = _apply_required_terms_filter(candidates_sv, required_terms)
 
-    # Cross-encoder reranking: pontua cada par (query, doc) e seleciona top_k
+    # Cross-encoder reranking: uma única chamada model.predict() para todos os grupos
     if settings.reranker_enabled:
-        sources = rerank_service.rerank(question, candidates_acordaos, top_n=settings.rag_top_k)
-        sources_teses = rerank_service.rerank(question, candidates_teses, top_n=settings.rag_top_k_teses)
-        sources_sv = rerank_service.rerank(question, candidates_sv, top_n=2)
+        sources, sources_teses, sources_sv = rerank_service.rerank_multi(
+            question,
+            [
+                (candidates_acordaos, settings.rag_top_k),
+                (candidates_teses, settings.rag_top_k_teses),
+                (candidates_sv, 2),
+            ],
+        )
     else:
         sources = candidates_acordaos[:settings.rag_top_k]
         sources_teses = candidates_teses[:settings.rag_top_k_teses]
@@ -165,9 +170,9 @@ def _filter_cited_sources(
     "não encontrei informação"), retorna as listas originais para evitar que a
     UI mostre zero fontes.
     """
-    filtered_s = rerank_service.filter_by_answer(answer, sources)
-    filtered_t = rerank_service.filter_by_answer(answer, sources_teses)
-    filtered_sv = rerank_service.filter_by_answer(answer, sources_sv)
+    filtered_s, filtered_t, filtered_sv = rerank_service.filter_by_answer_multi(
+        answer, [sources, sources_teses, sources_sv]
+    )
 
     if not filtered_s and not filtered_t and not filtered_sv:
         logger.info(

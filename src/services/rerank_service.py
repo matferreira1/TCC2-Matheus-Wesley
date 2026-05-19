@@ -128,6 +128,61 @@ def rerank(
     return result[:limit]
 
 
+def rerank_multi(
+    query: str,
+    groups: list[tuple[list, int]],
+) -> list[list]:
+    """
+    Reordena múltiplos grupos de documentos em uma única chamada model.predict().
+
+    Consolida todos os pares (query, doc) de acórdãos, teses e SVs numa só
+    inferência, eliminando o overhead de tokenização de chamadas separadas.
+
+    Parâmetros
+    ----------
+    query:
+        Pergunta original do usuário.
+    groups:
+        Lista de (docs, top_n) — um item por tipo (acórdãos, teses, SVs).
+
+    Retorno
+    -------
+    Lista de listas reordenadas, uma por grupo, na mesma ordem de ``groups``.
+    """
+    if not groups:
+        return []
+
+    try:
+        model = _get_model()
+
+        all_pairs: list[tuple[str, str]] = []
+        boundaries: list[int] = [0]
+        for docs, _ in groups:
+            for doc in docs:
+                all_pairs.append((query, _get_text(doc)))
+            boundaries.append(len(all_pairs))
+
+        scores: list[float] = model.predict(all_pairs).tolist() if all_pairs else []
+
+        results: list[list] = []
+        for i, (docs, top_n) in enumerate(groups):
+            start, end = boundaries[i], boundaries[i + 1]
+            group_scores = scores[start:end]
+            ranked = sorted(zip(group_scores, docs), key=lambda x: x[0], reverse=True)
+            results.append([d for _, d in ranked][:top_n])
+            logger.info(
+                "rerank_multi[%d]: %d candidatos → top %d selecionados.",
+                i, len(docs), min(top_n, len(docs)),
+            )
+        return results
+
+    except Exception as exc:
+        logger.warning(
+            "rerank_multi: cross-encoder indisponível (%s) — usando ordem RRF.", exc
+        )
+        return [docs[:top_n] for docs, top_n in groups]
+
+
 def filter_by_answer(
     answer: str,
     docs: list[T],
@@ -174,3 +229,49 @@ def filter_by_answer(
         [f"{s:.2f}" for s in scores],
     )
     return kept
+
+
+def filter_by_answer_multi(
+    answer: str,
+    groups: list[list],
+    threshold: float = _ANSWER_FILTER_THRESHOLD,
+) -> list[list]:
+    """
+    Filtra múltiplos grupos de documentos em uma única chamada model.predict().
+
+    Consolida os pares (resposta, doc) de todos os grupos numa só inferência,
+    eliminando o overhead de chamadas separadas ao cross-encoder.
+    """
+    if not groups:
+        return []
+
+    try:
+        model = _get_model()
+
+        all_pairs: list[tuple[str, str]] = []
+        boundaries: list[int] = [0]
+        for docs in groups:
+            for doc in docs:
+                all_pairs.append((answer, _get_text(doc)))
+            boundaries.append(len(all_pairs))
+
+        scores: list[float] = model.predict(all_pairs).tolist() if all_pairs else []
+
+        results: list[list] = []
+        for i, docs in enumerate(groups):
+            start, end = boundaries[i], boundaries[i + 1]
+            group_scores = scores[start:end]
+            kept = [d for score, d in zip(group_scores, docs) if score >= threshold]
+            logger.info(
+                "filter_by_answer_multi[%d]: %d/%d fontes retidas (threshold=%.1f) | scores=%s",
+                i, len(kept), len(docs), threshold,
+                [f"{s:.2f}" for s in group_scores],
+            )
+            results.append(kept)
+        return results
+
+    except Exception as exc:
+        logger.warning(
+            "filter_by_answer_multi: cross-encoder falhou (%s) — retornando originais.", exc
+        )
+        return [list(docs) for docs in groups]
