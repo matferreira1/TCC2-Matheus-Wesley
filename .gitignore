@@ -20,6 +20,9 @@ env/
 # ─── Banco de dados SQLite (grande demais para o git) ─────
 
 
+# ─── Telemetria de métricas (gerada em runtime) ───
+data/metrics_log.jsonl
+
 # ─── Dados brutos (podem ser grandes) ─────────
 data/raw/*.csv
 data/raw/*.zip

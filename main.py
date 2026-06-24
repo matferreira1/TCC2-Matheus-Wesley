@@ -28,6 +28,7 @@ _BASE_DIR = Path(__file__).parent
 
 from src.api.limiter import limiter
 from src.api.routes import health as health_router
+from src.api.routes import metrics as metrics_router
 from src.api.routes import query as query_router
 from src.config.logging_config import setup_logging
 from src.config.settings import get_settings
@@ -133,6 +134,8 @@ async def lifespan(app: FastAPI):
     await open_db()
     await init_db()
     await _warmup_models()
+    from src.services import metrics_service
+    metrics_service.load_history()
     logger.info("Banco de dados pronto. Servidor disponível.")
 
     yield  # aplicação em execução
@@ -202,6 +205,7 @@ app.add_middleware(_SecurityHeadersMiddleware)
 
 app.include_router(health_router.router, prefix="/api/v1", tags=["Health"])
 app.include_router(query_router.router, prefix="/api/v1", tags=["Consulta RAG"])
+app.include_router(metrics_router.router, prefix="/api/v1", tags=["Métricas"])
 
 # ---------------------------------------------------------------------------
 # Frontend — interface web
@@ -213,6 +217,11 @@ app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="sta
 @app.get("/", include_in_schema=False)
 async def serve_frontend() -> FileResponse:
     return FileResponse(_BASE_DIR / "static" / "index.html")
+
+
+@app.get("/metrics", include_in_schema=False)
+async def serve_metrics_dashboard() -> FileResponse:
+    return FileResponse(_BASE_DIR / "static" / "metrics.html")
 
 # ---------------------------------------------------------------------------
 # Execução direta (desenvolvimento)

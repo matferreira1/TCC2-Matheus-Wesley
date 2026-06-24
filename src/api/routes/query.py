@@ -10,12 +10,12 @@ import re
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 
 import aiosqlite
 from src.api.schemas.query_schema import QueryRequest, QueryResponse, SourceDocument
 from src.database.connection import get_db
-from src.services import rag_service
+from src.services import metrics_service, rag_service
 from src.api.limiter import limiter
 from src.config.settings import get_settings as _get_settings
 
@@ -54,6 +54,7 @@ def _check_injection(question: str) -> None:
 async def handle_query(
     request: Request,
     payload: QueryRequest,
+    background_tasks: BackgroundTasks,
     conn: aiosqlite.Connection = Depends(get_db),
 ) -> QueryResponse:
     """Handler principal do endpoint de consulta RAG."""
@@ -70,16 +71,22 @@ async def handle_query(
             required_terms=payload.required_terms,
         )
     except httpx.TimeoutException:
+        metrics_service.record_error(payload.question, "timeout")
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="O modelo LLM não respondeu a tempo. Tente novamente.",
         )
     except Exception as exc:
+        metrics_service.record_error(payload.question, str(exc))
         logger.exception("Erro inesperado no pipeline RAG: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro interno ao processar a consulta.",
         )
+
+    # Métricas de qualidade (grounding + proxies por embedding) são calculadas
+    # em background — não atrasam a resposta ao usuário.
+    background_tasks.add_task(metrics_service.record_query, payload.question, resp)
 
     sources_sv = [
         SourceDocument(

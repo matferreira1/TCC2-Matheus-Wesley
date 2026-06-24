@@ -35,6 +35,9 @@ class RagResponse:
     sources: list[search_service.SearchResult] = field(default_factory=list)
     sources_teses: list[search_service.TesesResult] = field(default_factory=list)
     sources_sv: list[search_service.SumulaVinculanteResult] = field(default_factory=list)
+    # Telemetria por consulta (latência, funil de recuperação, provedor) — usada
+    # pelo dashboard de métricas. Preenchida ao fim de answer().
+    meta: dict = field(default_factory=dict)
 
 
 async def answer(
@@ -146,7 +149,35 @@ async def answer(
 
     elapsed = time.perf_counter() - inicio
     logger.info("Pipeline concluído em %.1fs", elapsed)
-    return RagResponse(answer=text, sources=sources, sources_teses=sources_teses, sources_sv=sources_sv)
+
+    meta = {
+        "latency_s": round(elapsed, 3),
+        "provider": settings.llm_provider,
+        "model": settings.groq_model if settings.llm_provider == "groq" else settings.ollama_model,
+        "funnel": {
+            "fts5": {"acordaos": len(fts5_acordaos), "teses": len(fts5_teses), "sv": len(fts5_sv)},
+            "semantic": {"acordaos": len(sem_acordaos), "teses": len(sem_teses), "sv": len(sem_sv)},
+            "rrf": {
+                "acordaos": len(candidates_acordaos),
+                "teses": len(candidates_teses),
+                "sv": len(candidates_sv),
+            },
+            "final": {
+                "acordaos": len(sources),
+                "teses": len(sources_teses),
+                "sv": len(sources_sv),
+            },
+        },
+        "answer_chars": len(text),
+        "prompt_chars": len(prompt),
+    }
+    return RagResponse(
+        answer=text,
+        sources=sources,
+        sources_teses=sources_teses,
+        sources_sv=sources_sv,
+        meta=meta,
+    )
 
 
 def _filter_cited_sources(

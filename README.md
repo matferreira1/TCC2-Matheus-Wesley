@@ -205,6 +205,7 @@ No startup, a suite de testes é executada automaticamente e os resultados são 
 | Endereço | Descrição |
 |---|---|
 | `http://localhost:8000` | Interface web |
+| `http://localhost:8000/metrics` | Dashboard de métricas (ao vivo + avaliação offline) |
 | `http://localhost:8000/docs` | Documentação interativa da API (Swagger) |
 | `http://localhost:8000/api/v1/health` | Health check |
 
@@ -251,6 +252,26 @@ curl -X POST http://localhost:8000/api/v1/query \
 | `question` | string | Sim | Pergunta jurídica (10–1.000 caracteres) |
 
 **Documentação interativa:** `http://localhost:8000/docs`
+
+---
+
+## Dashboard de métricas
+
+A página `http://localhost:8000/metrics` exibe as métricas do sistema de forma visual e **se atualiza a cada consulta** (polling a cada 4 s). Divide-se em dois painéis:
+
+**Ao vivo** — calculado por consulta, sem chamada extra de LLM (custo ~zero):
+- **Operação**: latência p50/p95/p99/média, throughput (consultas no último minuto), taxa de erro, distribuição de provedor.
+- **Funil de recuperação**: média de candidatos em cada estágio (FTS5 → semântico → RRF → fontes finais).
+- **Qualidade *reference-free***: grounding por citação (% de citações que correspondem a fontes reais), proxy de *groundedness* (cosseno entre resposta e fontes) e proxy de relevância (cosseno entre pergunta e resposta), via MiniLM já carregado em memória.
+- **Últimas consultas**: feed das consultas recentes com latência, grounding e relevância.
+
+**Avaliação offline** — lido de `eval/results/consolidated_report.json`: Recall@k, MRR, nDCG@k, P@k, LLM-judge (groundedness/relevância/coerência/fluência) e latência de benchmark. Essas métricas dependem do gabarito de relevância e só são recalculadas ao rodar `python -m eval.run_evaluation` — não por prompt.
+
+> As métricas de qualidade são calculadas em *background* (`BackgroundTasks`) após a resposta ser enviada ao usuário, portanto não adicionam latência à consulta. A telemetria é persistida em `data/metrics_log.jsonl` (janela das últimas 500 consultas em memória) e sobrevive a reinícios.
+
+> **Proteção de dados (LGPD).** A pergunta do usuário é a única entrada de texto livre da telemetria. Antes de ser persistida ou exposta no dashboard, identificadores pessoais estruturados (CPF, CNPJ, e-mail, telefone) são **mascarados na origem** (`metrics_service._redact_pii`), seguindo o princípio de minimização de dados. Números de processo e referências (ADI, súmulas) são preservados por serem registros públicos. O corpus jurídico (STF/STJ) é público e está fora do escopo da LGPD.
+
+Servido por `GET /api/v1/metrics`.
 
 ---
 
@@ -341,13 +362,15 @@ iajuris/
 │   │   ├── rerank_service.py # Cross-encoder reranking (pós-RRF)
 │   │   ├── query_expansion.py# Sinônimos jurídicos para FTS5
 │   │   ├── rag_service.py    # Orquestrador: FTS5+semântica → RRF → rerank → LLM
+│   │   ├── metrics_service.py# Telemetria por consulta (latência, grounding, proxies)
 │   │   ├── groq_service.py   # Cliente Groq API (singleton AsyncGroq)
 │   │   └── ollama_service.py # Cliente Ollama (streaming HTTP)
 │   └── api/
 │       ├── limiter.py        # Instância slowapi.Limiter
 │       ├── routes/
 │       │   ├── query.py      # POST /api/v1/query (rate limit + injection check)
-│       │   └── health.py     # GET /api/v1/health
+│       │   ├── health.py     # GET /api/v1/health
+│       │   └── metrics.py    # GET /api/v1/metrics (telemetria ao vivo + offline)
 │       └── schemas/          # QueryRequest, QueryResponse, SourceDocument
 │
 └── tests/

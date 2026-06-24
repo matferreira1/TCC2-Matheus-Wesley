@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IAJuris — Métricas</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        colors: {
+          bg: '#111318', surface: '#1A1D27', border: '#2A2E3F',
+          text: '#E2E2E8', muted: '#6B7080', accent: '#4F7CAC',
+          ok: '#3FB950', fail: '#F85149', warn: '#D29922',
+        },
+        fontFamily: {
+          serif: ['"Playfair Display"', 'Georgia', 'serif'],
+          sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        },
+      } }
+    }
+  </script>
+  <style>
+    body { font-family: 'DM Sans', system-ui, sans-serif; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.3s ease forwards; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .live-dot { animation: pulse 1.8s ease-in-out infinite; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #2A2E3F; border-radius: 4px; }
+  </style>
+</head>
+
+<body class="bg-bg text-text min-h-screen">
+  <div class="max-w-5xl mx-auto px-6 py-10">
+
+    <header class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="font-serif text-3xl">Métricas do sistema</h1>
+        <p class="text-muted text-sm mt-1">
+          <a href="/" class="hover:text-accent transition">← Voltar ao IAJuris</a>
+        </p>
+      </div>
+      <div class="flex items-center gap-2 text-sm text-muted">
+        <span class="live-dot w-2 h-2 rounded-full bg-ok inline-block"></span>
+        <span id="refresh-info">ao vivo</span>
+      </div>
+    </header>
+
+    <!-- ───────────── Ao vivo ───────────── -->
+    <section class="mb-10">
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="text-lg font-medium">Ao vivo <span class="text-muted text-sm font-light">— atualiza a cada consulta</span></h2>
+        <span id="window-info" class="text-muted text-xs"></span>
+      </div>
+
+      <!-- Operação -->
+      <p class="text-muted text-xs uppercase tracking-wider mb-2">Operação</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-lat-p50" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Latência p50</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-lat-p95" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Latência p95</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-tput" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Consultas / último min</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-err" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Taxa de erro</div>
+        </div>
+      </div>
+
+      <!-- Qualidade -->
+      <p class="text-muted text-xs uppercase tracking-wider mb-2">Qualidade (reference-free, por embedding/citação)</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-ground" class="text-2xl font-medium text-ok">—</div>
+          <div class="text-muted text-xs mt-1">Grounding (citações)</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-ground-proxy" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Groundedness (cosseno)</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-rel-proxy" class="text-2xl font-medium">—</div>
+          <div class="text-muted text-xs mt-1">Relevância (cosseno)</div>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-4">
+          <div id="m-halluc" class="text-2xl font-medium text-warn">—</div>
+          <div class="text-muted text-xs mt-1">Citações alucinadas / consulta</div>
+        </div>
+      </div>
+
+      <!-- Funil de recuperação -->
+      <p class="text-muted text-xs uppercase tracking-wider mb-2">Funil de recuperação (média de candidatos — acórdãos)</p>
+      <div id="funnel" class="bg-surface border border-border rounded-xl p-4 flex items-end justify-between gap-2 mb-5"></div>
+
+      <!-- Provedor -->
+      <div id="providers" class="text-muted text-xs"></div>
+    </section>
+
+    <!-- ───────────── Últimas consultas ───────────── -->
+    <section class="mb-10">
+      <h2 class="text-lg font-medium mb-3">Últimas consultas</h2>
+      <div id="recent" class="space-y-2">
+        <p class="text-muted text-sm">Nenhuma consulta registrada ainda.</p>
+      </div>
+    </section>
+
+    <!-- ───────────── Avaliação offline ───────────── -->
+    <section class="mb-10">
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="text-lg font-medium">Avaliação offline <span class="text-muted text-sm font-light">— sobre o dataset rotulado (eval/)</span></h2>
+        <span id="offline-info" class="text-muted text-xs"></span>
+      </div>
+      <div id="offline" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <p class="text-muted text-sm">Sem avaliação offline disponível.</p>
+      </div>
+      <p class="text-muted text-xs mt-3">
+        Recall@k, MRR, nDCG@k, P@k e LLM-judge dependem do gabarito de relevância e
+        só são recalculados ao rodar a avaliação (<code>python -m eval.run_evaluation</code>),
+        não por prompt.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmtPct = (v) => v == null ? '—' : (100 * v).toFixed(0) + '%';
+    const fmtNum = (v, d = 2) => v == null ? '—' : Number(v).toFixed(d);
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function fmtTime(iso) {
+      try { return new Date(iso).toLocaleTimeString('pt-BR'); } catch { return ''; }
+    }
+
+    function renderLive(live) {
+      const op = live.operation, q = live.quality, f = live.retrieval_funnel;
+
+      $('window-info').textContent =
+        `janela: ${live.window_size} consultas · total acumulado: ${live.lifetime_count}`;
+
+      $('m-lat-p50').textContent = op.latency_p50_s ? op.latency_p50_s + 's' : '—';
+      $('m-lat-p95').textContent = op.latency_p95_s ? op.latency_p95_s + 's' : '—';
+      $('m-tput').textContent = op.throughput_last_min;
+      $('m-err').textContent = fmtPct(op.error_rate);
+      $('m-err').className = 'text-2xl font-medium ' + (op.error_rate > 0 ? 'text-fail' : 'text-ok');
+
+      $('m-ground').textContent = fmtPct(q.grounding_mean);
+      $('m-ground-proxy').textContent = fmtNum(q.groundedness_proxy_mean);
+      $('m-rel-proxy').textContent = fmtNum(q.relevance_proxy_mean);
+      $('m-halluc').textContent = fmtNum(q.hallucinated_mean, 1);
+
+      // Funil
+      const stages = [
+        ['FTS5', f.fts5_acordaos], ['Semântico', f.semantic_acordaos],
+        ['RRF', f.rrf_acordaos], ['Final', f.final_acordaos],
+      ];
+      const max = Math.max(1, ...stages.map(s => s[1]));
+      $('funnel').innerHTML = stages.map(([label, val]) => `
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <span class="text-sm font-medium">${val}</span>
+          <div class="w-full bg-accent/70 rounded-t" style="height:${Math.max(4, 60 * val / max)}px"></div>
+          <span class="text-muted text-xs">${label}</span>
+        </div>`).join('');
+
+      // Provedores
+      const provs = Object.entries(op.providers || {});
+      $('providers').innerHTML = provs.length
+        ? 'Provedor: ' + provs.map(([k, v]) => `<span class="text-text">${escapeHtml(k)}</span> (${v})`).join(' · ')
+        : '';
+
+      // Últimas consultas
+      const recent = live.recent || [];
+      if (recent.length === 0) {
+        $('recent').innerHTML = '<p class="text-muted text-sm">Nenhuma consulta registrada ainda.</p>';
+      } else {
+        $('recent').innerHTML = recent.map(r => {
+          if (!r.success) {
+            return `<div class="bg-surface border border-fail/30 rounded-lg px-4 py-2.5 fade-in flex items-center justify-between gap-3">
+              <span class="text-sm truncate">${escapeHtml(r.question)}</span>
+              <span class="text-fail text-xs shrink-0">falhou · ${fmtTime(r.ts)}</span>
+            </div>`;
+          }
+          return `<div class="bg-surface border border-border rounded-lg px-4 py-2.5 fade-in flex items-center justify-between gap-3">
+            <span class="text-sm truncate flex-1">${escapeHtml(r.question)}</span>
+            <div class="flex items-center gap-3 shrink-0 text-xs">
+              <span class="text-muted">${r.latency_s != null ? r.latency_s + 's' : ''}</span>
+              <span class="text-ok" title="grounding por citação">G ${fmtPct(r.grounding_score)}</span>
+              <span class="text-accent" title="relevância (cosseno)">R ${fmtNum(r.relevance_proxy)}</span>
+              <span class="text-muted">${fmtTime(r.ts)}</span>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    function renderOffline(off) {
+      const box = $('offline');
+      if (!off || !off.available) {
+        box.innerHTML = '<p class="text-muted text-sm">Sem avaliação offline disponível.</p>';
+        return;
+      }
+      if (off.generated_at_mtime) {
+        $('offline-info').textContent = 'gerado em ' + new Date(off.generated_at_mtime * 1000).toLocaleString('pt-BR');
+      }
+      const m = off.modules || {};
+      const cards = [];
+
+      if (m.retrieval && m.retrieval.fts5) {
+        const r = m.retrieval.fts5;
+        cards.push(card('Recuperação (FTS5)', [
+          ['Recall@' + (off.top_k || 5), fmtNum(r['Recall@' + (off.top_k || 5)] ?? r.Recall, 3)],
+          ['MRR', fmtNum(r.MRR, 3)],
+          ['nDCG@' + (off.top_k || 5), fmtNum(r['nDCG@' + (off.top_k || 5)] ?? r.nDCG, 3)],
+          ['P@' + (off.top_k || 5), fmtNum(r['P@' + (off.top_k || 5)] ?? r.P, 3)],
+        ]));
+      }
+      if (m.generation && m.generation.judge_mean) {
+        const g = m.generation.judge_mean;
+        cards.push(card('Geração (LLM-judge, 0–5)', [
+          ['Groundedness', fmtNum(g.groundedness, 2)],
+          ['Relevância', fmtNum(g.relevancia, 2)],
+          ['Coerência', fmtNum(g.coerencia, 2)],
+          ['Fluência', fmtNum(g.fluencia, 2)],
+          ['Grounding médio', fmtPct(m.generation.grounding_mean)],
+        ]));
+      }
+      if (m.latency) {
+        const l = m.latency;
+        cards.push(card('Latência (benchmark)', [
+          ['p50', fmtNum(l.p50_s, 2) + 's'], ['p95', fmtNum(l.p95_s, 2) + 's'],
+          ['p99', fmtNum(l.p99_s, 2) + 's'], ['média', fmtNum(l.mean_s, 2) + 's'],
+        ]));
+      }
+      if (m.operational) {
+        const o = m.operational;
+        cards.push(card('Operação (benchmark)', [
+          ['Taxa de erro', fmtPct(o.error_rate)],
+          ['Throughput/min', fmtNum(o.throughput_per_min, 2)],
+        ]));
+      }
+      box.innerHTML = cards.join('') || '<p class="text-muted text-sm">Relatório offline sem módulos reconhecidos.</p>';
+    }
+
+    function card(title, rows) {
+      return `<div class="bg-surface border border-border rounded-xl p-4">
+        <h3 class="text-sm font-medium mb-3">${escapeHtml(title)}</h3>
+        <div class="space-y-1.5">${rows.map(([k, v]) =>
+          `<div class="flex justify-between text-sm"><span class="text-muted">${escapeHtml(k)}</span><span>${v}</span></div>`
+        ).join('')}</div>
+      </div>`;
+    }
+
+    async function load() {
+      try {
+        const r = await fetch('/api/v1/metrics');
+        const data = await r.json();
+        renderLive(data.live);
+        renderOffline(data.offline);
+      } catch (e) {
+        $('refresh-info').textContent = 'sem conexão';
+      }
+    }
+
+    load();
+    setInterval(load, 4000);  // atualiza a cada 4s — reflete novos prompts
+  </script>
+</body>
+</html>
